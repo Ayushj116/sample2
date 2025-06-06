@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   Filter, 
@@ -13,72 +13,100 @@ import {
   TrendingUp,
   DollarSign,
   Users,
-  FileText
+  FileText,
+  X
 } from 'lucide-react';
+import { adminService, AdminDashboardData, FlaggedDeal, KYCReview } from '../services/adminService';
+import { useAuth } from '../context/AuthContext';
 
 const AdminDashboardPage = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [dashboardData, setDashboardData] = useState<AdminDashboardData | null>(null);
+  const [flaggedDeals, setFlaggedDeals] = useState<FlaggedDeal[]>([]);
+  const [kycReviews, setKycReviews] = useState<KYCReview[]>([]);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
 
-  // Mock data for admin dashboard
-  const stats = [
-    { label: 'Active Deals', value: '145', change: '+12%', icon: Clock, color: 'text-blue-600' },
-    { label: 'Total Volume', value: '₹2.3Cr', change: '+8.5%', icon: DollarSign, color: 'text-green-600' },
-    { label: 'New Users', value: '89', change: '+15%', icon: Users, color: 'text-purple-600' },
-    { label: 'Success Rate', value: '99.2%', change: '+0.3%', icon: TrendingUp, color: 'text-orange-600' }
-  ];
+  const { user } = useAuth();
 
-  const flaggedDeals = [
-    {
-      id: 'ST001',
-      title: 'Luxury Car Sale - BMW X5',
-      amount: 2500000,
-      flag: 'high-value',
-      severity: 'medium',
-      buyer: 'Ravi Kumar',
-      seller: 'Auto Dealership Ltd',
-      flaggedAt: '2024-01-15 14:30'
-    },
-    {
-      id: 'ST002',
-      title: 'Multiple Property Purchase',
-      amount: 15000000,
-      flag: 'multiple-deals',
-      severity: 'high',
-      buyer: 'Investment Group',
-      seller: 'Property Developer',
-      flaggedAt: '2024-01-15 12:15'
-    },
-    {
-      id: 'ST003',
-      title: 'Cryptocurrency Mining Equipment',
-      amount: 500000,
-      flag: 'unusual-category',
-      severity: 'low',
-      buyer: 'Tech Startup',
-      seller: 'Hardware Supplier',
-      flaggedAt: '2024-01-15 09:45'
+  useEffect(() => {
+    if (user?.isAdmin) {
+      fetchDashboardData();
     }
-  ];
+  }, [user]);
 
-  const kycReviews = [
-    {
-      id: 'KYC001',
-      user: 'Priya Sharma',
-      type: 'personal',
-      status: 'pending',
-      submittedAt: '2024-01-15 16:20',
-      documents: ['PAN', 'Aadhaar', 'Bank Statement']
-    },
-    {
-      id: 'KYC002',
-      user: 'Mumbai Traders Pvt Ltd',
-      type: 'business',
-      status: 'review',
-      submittedAt: '2024-01-15 14:45',
-      documents: ['GST Certificate', 'Registration', 'Bank Statement']
+  useEffect(() => {
+    if (activeTab === 'flagged') {
+      fetchFlaggedDeals();
+    } else if (activeTab === 'kyc') {
+      fetchKYCReviews();
     }
-  ];
+  }, [activeTab]);
+
+  const fetchDashboardData = async () => {
+    try {
+      setIsLoading(true);
+      const response = await adminService.getDashboardData();
+      if (response.success) {
+        setDashboardData(response.data);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load dashboard data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const fetchFlaggedDeals = async () => {
+    try {
+      const response = await adminService.getFlaggedDeals();
+      if (response.success) {
+        setFlaggedDeals(response.data.deals);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load flagged deals');
+    }
+  };
+
+  const fetchKYCReviews = async () => {
+    try {
+      const response = await adminService.getKYCReviews();
+      if (response.success) {
+        setKycReviews(response.data.reviews);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load KYC reviews');
+    }
+  };
+
+  const handleKYCAction = async (kycId: string, action: 'approve' | 'reject', notes?: string) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [kycId]: true }));
+      await adminService.reviewKYC(kycId, action, notes);
+      fetchKYCReviews(); // Refresh the list
+      setSelectedItem(null);
+    } catch (err: any) {
+      setError(err.message || `Failed to ${action} KYC`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [kycId]: false }));
+    }
+  };
+
+  const handleDealAction = async (dealId: string, action: 'approve' | 'flag' | 'investigate', notes?: string) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [dealId]: true }));
+      await adminService.reviewDeal(dealId, action, notes);
+      fetchFlaggedDeals(); // Refresh the list
+      setSelectedItem(null);
+    } catch (err: any) {
+      setError(err.message || `Failed to ${action} deal`);
+    } finally {
+      setActionLoading(prev => ({ ...prev, [dealId]: false }));
+    }
+  };
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -106,6 +134,31 @@ const AdminDashboardPage = () => {
     }
   };
 
+  if (!user?.isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">Access Denied</h1>
+            <p className="text-gray-600">You don't have permission to access the admin dashboard.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-center min-h-96">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -119,33 +172,87 @@ const AdminDashboardPage = () => {
             <div className="flex items-center space-x-4">
               <div className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
                 <AlertTriangle className="w-4 h-4 mr-1" />
-                3 Flagged
+                {flaggedDeals.length} Flagged
               </div>
               <div className="bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-sm font-medium flex items-center">
                 <Clock className="w-4 h-4 mr-1" />
-                2 Pending KYC
+                {kycReviews.filter(k => k.status === 'pending').length} Pending KYC
               </div>
             </div>
           </div>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertTriangle className="w-5 h-5 text-red-600 mr-2" />
+                <p className="text-red-700">{error}</p>
+              </div>
+              <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => (
-            <div key={index} className="bg-white p-6 rounded-xl shadow-sm">
+        {dashboardData && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{stat.value}</p>
-                  <p className="text-sm text-green-600 mt-1">{stat.change}</p>
+                  <p className="text-sm font-medium text-gray-600">Active Deals</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{dashboardData.stats.activeDeals}</p>
+                  <p className="text-sm text-green-600 mt-1">+12%</p>
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50">
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                  <Clock className="w-6 h-6 text-blue-600" />
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Volume</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{dashboardData.stats.totalVolume}</p>
+                  <p className="text-sm text-green-600 mt-1">+8.5%</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <DollarSign className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">New Users</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{dashboardData.stats.newUsers}</p>
+                  <p className="text-sm text-green-600 mt-1">+15%</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <Users className="w-6 h-6 text-purple-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Success Rate</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{dashboardData.stats.successRate}</p>
+                  <p className="text-sm text-green-600 mt-1">+0.3%</p>
+                </div>
+                <div className="p-3 rounded-lg bg-gray-50">
+                  <TrendingUp className="w-6 h-6 text-orange-600" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Navigation Tabs */}
         <div className="bg-white rounded-xl shadow-sm mb-8">
@@ -196,28 +303,20 @@ const AdminDashboardPage = () => {
             </div>
 
             {/* Overview Tab */}
-            {activeTab === 'overview' && (
+            {activeTab === 'overview' && dashboardData && (
               <div className="space-y-6">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Recent Activity */}
                   <div className="bg-gray-50 p-6 rounded-lg">
                     <h3 className="font-semibold text-gray-900 mb-4">Recent Activity</h3>
                     <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">Deal ST001 completed successfully</span>
-                        <span className="text-xs text-gray-500">2 min ago</span>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">KYC review pending for user KYC001</span>
-                        <span className="text-xs text-gray-500">5 min ago</span>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span className="text-sm text-gray-700">High-value deal flagged for review</span>
-                        <span className="text-xs text-gray-500">12 min ago</span>
-                      </div>
+                      {dashboardData.recentActivity.map((activity) => (
+                        <div key={activity.id} className="flex items-center space-x-3">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-sm text-gray-700">{activity.details}</span>
+                          <span className="text-xs text-gray-500">{new Date(activity.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -266,9 +365,9 @@ const AdminDashboardPage = () => {
                           </span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600 mb-3">
-                          <div>Deal ID: {deal.id}</div>
+                          <div>Deal ID: {deal.dealId}</div>
                           <div>Amount: ₹{deal.amount.toLocaleString()}</div>
-                          <div>Flagged: {deal.flaggedAt}</div>
+                          <div>Flagged: {new Date(deal.flaggedAt).toLocaleDateString()}</div>
                         </div>
                         <div className="flex items-center space-x-4 text-sm">
                           <span>Buyer: {deal.buyer}</span>
@@ -283,14 +382,25 @@ const AdminDashboardPage = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2 ml-4">
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-white transition-colors">
+                        <button 
+                          onClick={() => setSelectedItem(deal)}
+                          className="p-2 border border-gray-300 rounded-lg hover:bg-white transition-colors"
+                        >
                           <Eye className="w-5 h-5 text-gray-500" />
                         </button>
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-white transition-colors">
-                          <MessageSquare className="w-5 h-5 text-gray-500" />
+                        <button 
+                          onClick={() => handleDealAction(deal.id, 'approve')}
+                          disabled={actionLoading[deal.id]}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50"
+                        >
+                          {actionLoading[deal.id] ? 'Processing...' : 'Approve'}
                         </button>
-                        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors">
-                          Review
+                        <button 
+                          onClick={() => handleDealAction(deal.id, 'investigate')}
+                          disabled={actionLoading[deal.id]}
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                        >
+                          {actionLoading[deal.id] ? 'Processing...' : 'Investigate'}
                         </button>
                       </div>
                     </div>
@@ -317,7 +427,7 @@ const AdminDashboardPage = () => {
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-3">
                           <div>KYC ID: {kyc.id}</div>
-                          <div>Submitted: {kyc.submittedAt}</div>
+                          <div>Submitted: {new Date(kyc.submittedAt).toLocaleDateString()}</div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <FileText className="w-4 h-4 text-gray-500" />
@@ -327,15 +437,26 @@ const AdminDashboardPage = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2 ml-4">
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-white transition-colors">
+                        <button 
+                          onClick={() => setSelectedItem(kyc)}
+                          className="p-2 border border-gray-300 rounded-lg hover:bg-white transition-colors"
+                        >
                           <Eye className="w-5 h-5 text-gray-500" />
                         </button>
-                        <button className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center">
+                        <button 
+                          onClick={() => handleKYCAction(kyc.id, 'approve')}
+                          disabled={actionLoading[kyc.id]}
+                          className="bg-green-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center disabled:opacity-50"
+                        >
                           <CheckCircle className="w-4 h-4 mr-1" />
-                          Approve
+                          {actionLoading[kyc.id] ? 'Processing...' : 'Approve'}
                         </button>
-                        <button className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors">
-                          Reject
+                        <button 
+                          onClick={() => handleKYCAction(kyc.id, 'reject')}
+                          disabled={actionLoading[kyc.id]}
+                          className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                        >
+                          {actionLoading[kyc.id] ? 'Processing...' : 'Reject'}
                         </button>
                       </div>
                     </div>
@@ -402,6 +523,30 @@ const AdminDashboardPage = () => {
             )}
           </div>
         </div>
+
+        {/* Modal for viewing details */}
+        {selectedItem && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">
+                  {selectedItem.title || selectedItem.user} Details
+                </h3>
+                <button 
+                  onClick={() => setSelectedItem(null)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              <div className="space-y-4">
+                <pre className="text-sm bg-gray-50 p-4 rounded-lg overflow-x-auto">
+                  {JSON.stringify(selectedItem, null, 2)}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

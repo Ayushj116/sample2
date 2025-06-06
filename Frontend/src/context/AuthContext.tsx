@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, authService } from '../services/authService';
+import { notificationService } from '../services/notificationService';
 
 interface AuthContextType {
   user: User | null;
@@ -36,6 +37,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     if (currentUser && token) {
       setUser(currentUser);
+      
+      // Connect to notification service
+      notificationService.connect(currentUser.id);
+      
+      // Request notification permission
+      notificationService.requestPermission();
     }
     
     setIsLoading(false);
@@ -46,6 +53,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authService.login({ email, password });
       if (response.success) {
         setUser(response.data.user);
+        
+        // Connect to notification service
+        notificationService.connect(response.data.user.id);
+        notificationService.requestPermission();
       } else {
         throw new Error(response.message);
       }
@@ -59,6 +70,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await authService.register(userData);
       if (response.success) {
         setUser(response.data.user);
+        
+        // Connect to notification service
+        notificationService.connect(response.data.user.id);
+        notificationService.requestPermission();
       } else {
         throw new Error(response.message);
       }
@@ -69,6 +84,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = () => {
     authService.logout();
+    notificationService.disconnect();
     setUser(null);
   };
 
