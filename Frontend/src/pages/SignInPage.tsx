@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   ArrowLeft, 
   Shield, 
@@ -12,6 +12,8 @@ import {
   Building,
   AlertCircle
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { ApiError } from '../services/api';
 
 const SignInPage = () => {
   const [activeTab, setActiveTab] = useState('signin');
@@ -19,6 +21,13 @@ const SignInPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loginMethod, setLoginMethod] = useState('email');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login, register } = useAuth();
+  
+  const from = location.state?.from?.pathname || '/dashboard';
   
   const [formData, setFormData] = useState({
     email: '',
@@ -28,28 +37,31 @@ const SignInPage = () => {
     firstName: '',
     lastName: '',
     businessName: '',
+    businessType: '',
+    gstin: '',
     agreeToTerms: false,
     rememberMe: false
   });
 
-  const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
+    
     setFormData(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
     
     // Clear specific error when user starts typing
-    if (errors[name as keyof typeof errors]) {
+    if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: '' }));
     }
   };
 
   const validateForm = () => {
-    const newErrors: any = {};
+    const newErrors: Record<string, string> = {};
 
     if (activeTab === 'signup') {
       if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
@@ -93,19 +105,48 @@ const SignInPage = () => {
     if (!validateForm()) return;
 
     setIsLoading(true);
+    setErrors({});
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Handle successful login/signup
-      console.log('Form submitted:', { ...formData, activeTab, userType, loginMethod });
-      
-      // Redirect to dashboard
-      // navigate('/dashboard');
-      
+      if (activeTab === 'signin') {
+        const loginData = loginMethod === 'email' 
+          ? { email: formData.email, password: formData.password }
+          : { phone: formData.phone, password: formData.password };
+        
+        await login(loginData.email || '', loginData.password);
+        navigate(from, { replace: true });
+      } else {
+        const registerData = {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          password: formData.password,
+          userType: userType as 'personal' | 'business',
+          ...(loginMethod === 'email' ? { email: formData.email } : { phone: formData.phone }),
+          ...(userType === 'business' && {
+            businessName: formData.businessName,
+            businessType: formData.businessType,
+            gstin: formData.gstin
+          })
+        };
+        
+        await register(registerData);
+        navigate('/dashboard', { replace: true });
+      }
     } catch (error) {
-      setErrors({ general: 'Something went wrong. Please try again.' });
+      if (error instanceof ApiError) {
+        if (error.data?.errors) {
+          // Handle validation errors
+          const validationErrors: Record<string, string> = {};
+          error.data.errors.forEach((err: any) => {
+            validationErrors[err.field] = err.message;
+          });
+          setErrors(validationErrors);
+        } else {
+          setErrors({ general: error.message });
+        }
+      } else {
+        setErrors({ general: 'Something went wrong. Please try again.' });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -232,7 +273,7 @@ const SignInPage = () => {
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="firstName\" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
                       First Name *
                     </label>
                     <input
@@ -272,26 +313,63 @@ const SignInPage = () => {
                 </div>
 
                 {userType === 'business' && (
-                  <div>
-                    <label htmlFor="businessName" className="block text-sm font-medium text-gray-700">
-                      Business Name *
-                    </label>
-                    <input
-                      id="businessName"
-                      name="businessName"
-                      type="text"
-                      required
-                      value={formData.businessName}
-                      onChange={handleInputChange}
-                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                        errors.businessName ? 'border-red-300' : 'border-gray-300'
-                      }`}
-                      placeholder="Your Company Name"
-                    />
-                    {errors.businessName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.businessName}</p>
-                    )}
-                  </div>
+                  <>
+                    <div>
+                      <label htmlFor="businessName" className="block text-sm font-medium text-gray-700">
+                        Business Name *
+                      </label>
+                      <input
+                        id="businessName"
+                        name="businessName"
+                        type="text"
+                        required
+                        value={formData.businessName}
+                        onChange={handleInputChange}
+                        className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                          errors.businessName ? 'border-red-300' : 'border-gray-300'
+                        }`}
+                        placeholder="Your Company Name"
+                      />
+                      {errors.businessName && (
+                        <p className="mt-1 text-sm text-red-600">{errors.businessName}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label htmlFor="businessType" className="block text-sm font-medium text-gray-700">
+                        Business Type
+                      </label>
+                      <select
+                        id="businessType"
+                        name="businessType"
+                        value={formData.businessType}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select business type</option>
+                        <option value="proprietorship">Proprietorship</option>
+                        <option value="partnership">Partnership</option>
+                        <option value="private_limited">Private Limited</option>
+                        <option value="public_limited">Public Limited</option>
+                        <option value="llp">LLP</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="gstin" className="block text-sm font-medium text-gray-700">
+                        GSTIN (Optional)
+                      </label>
+                      <input
+                        id="gstin"
+                        name="gstin"
+                        type="text"
+                        value={formData.gstin}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="22AAAAA0000A1Z5"
+                      />
+                    </div>
+                  </>
                 )}
               </>
             )}

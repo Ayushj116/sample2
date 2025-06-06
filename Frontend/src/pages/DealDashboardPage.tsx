@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -13,61 +13,87 @@ import {
   Shield,
   TrendingUp
 } from 'lucide-react';
+import { dealService, Deal } from '../services/dealService';
+import { useAuth } from '../context/AuthContext';
 
 const DealDashboardPage = () => {
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
+  
+  const { user } = useAuth();
+  const location = useLocation();
 
-  // Mock data for deals
-  const deals = [
-    {
-      id: 'ST001',
-      title: 'Honda City 2019 Model',
-      amount: 250000,
-      status: 'funds-deposited',
-      type: 'vehicle',
-      counterparty: 'Riya Sharma',
-      role: 'seller',
-      createdAt: '2024-01-15',
-      nextAction: 'Deliver vehicle to buyer',
-      progress: 75
-    },
-    {
-      id: 'ST002',
-      title: '2BHK Apartment in Koramangala',
-      amount: 5000000,
-      status: 'kyc-pending',
-      type: 'real-estate',
-      counterparty: 'Manoj Kumar',
-      role: 'buyer',
-      createdAt: '2024-01-10',
-      nextAction: 'Complete KYC verification',
-      progress: 25
-    },
-    {
-      id: 'ST003',
-      title: 'Website Development Project',
-      amount: 75000,
-      status: 'completed',
-      type: 'freelancing',
-      counterparty: 'Tech Solutions Pvt Ltd',
-      role: 'seller',
-      createdAt: '2024-01-05',
-      nextAction: 'Deal completed',
-      progress: 100
+  // Show success message if redirected from create deal
+  const successMessage = location.state?.message;
+
+  useEffect(() => {
+    fetchDeals();
+  }, [activeTab, searchTerm]);
+
+  const fetchDeals = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      
+      const params: any = {
+        page: 1,
+        limit: 10
+      };
+      
+      if (activeTab === 'active') {
+        params.status = 'created,accepted,kyc_pending,documents_pending,payment_pending,contract_pending,funds_deposited,in_delivery,delivered';
+      } else if (activeTab === 'completed') {
+        params.status = 'completed';
+      }
+      
+      const response = await dealService.getDeals(params);
+      
+      if (response.success) {
+        let filteredDeals = response.data.deals;
+        
+        // Apply search filter
+        if (searchTerm) {
+          filteredDeals = filteredDeals.filter(deal => 
+            deal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            deal.dealId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (deal.buyer.fullName && deal.buyer.fullName.toLowerCase().includes(searchTerm.toLowerCase())) ||
+            (deal.seller.fullName && deal.seller.fullName.toLowerCase().includes(searchTerm.toLowerCase()))
+          );
+        }
+        
+        setDeals(filteredDeals);
+        setPagination(response.data.pagination);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to load deals');
+    } finally {
+      setIsLoading(false);
     }
-  ];
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
         return 'bg-green-100 text-green-800';
-      case 'funds-deposited':
+      case 'funds_deposited':
+      case 'in_delivery':
         return 'bg-blue-100 text-blue-800';
-      case 'kyc-pending':
+      case 'created':
+      case 'accepted':
         return 'bg-yellow-100 text-yellow-800';
+      case 'kyc_pending':
+      case 'documents_pending':
+      case 'payment_pending':
+      case 'contract_pending':
+        return 'bg-orange-100 text-orange-800';
       case 'disputed':
         return 'bg-red-100 text-red-800';
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -77,40 +103,85 @@ const DealDashboardPage = () => {
     switch (status) {
       case 'completed':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
-      case 'funds-deposited':
+      case 'funds_deposited':
+      case 'in_delivery':
         return <Shield className="w-5 h-5 text-blue-600" />;
-      case 'kyc-pending':
-        return <Clock className="w-5 h-5 text-yellow-600" />;
       case 'disputed':
         return <AlertCircle className="w-5 h-5 text-red-600" />;
       default:
-        return <Clock className="w-5 h-5 text-gray-600" />;
+        return <Clock className="w-5 h-5 text-yellow-600" />;
     }
+  };
+
+  const formatStatus = (status: string) => {
+    return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
   };
 
   const filteredDeals = deals.filter(deal => {
     const matchesSearch = deal.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         deal.counterparty.toLowerCase().includes(searchTerm.toLowerCase());
+                         deal.dealId.toLowerCase().includes(searchTerm.toLowerCase());
     
     if (activeTab === 'active') {
-      return matchesSearch && deal.status !== 'completed';
+      return matchesSearch && !['completed', 'cancelled', 'refunded'].includes(deal.status);
     } else if (activeTab === 'completed') {
-      return matchesSearch && deal.status === 'completed';
+      return matchesSearch && ['completed', 'cancelled', 'refunded'].includes(deal.status);
     }
     
     return matchesSearch;
   });
 
   const stats = [
-    { label: 'Active Deals', value: '2', icon: Clock, color: 'text-blue-600' },
-    { label: 'Completed Deals', value: '1', icon: CheckCircle, color: 'text-green-600' },
-    { label: 'Total Value', value: '₹53L', icon: TrendingUp, color: 'text-purple-600' },
-    { label: 'Success Rate', value: '100%', icon: Shield, color: 'text-orange-600' }
+    { 
+      label: 'Active Deals', 
+      value: deals.filter(d => !['completed', 'cancelled', 'refunded'].includes(d.status)).length.toString(), 
+      icon: Clock, 
+      color: 'text-blue-600' 
+    },
+    { 
+      label: 'Completed Deals', 
+      value: deals.filter(d => d.status === 'completed').length.toString(), 
+      icon: CheckCircle, 
+      color: 'text-green-600' 
+    },
+    { 
+      label: 'Total Value', 
+      value: `₹${(deals.reduce((sum, deal) => sum + deal.amount, 0) / 100000).toFixed(0)}L`, 
+      icon: TrendingUp, 
+      color: 'text-purple-600' 
+    },
+    { 
+      label: 'Success Rate', 
+      value: deals.length > 0 ? `${Math.round((deals.filter(d => d.status === 'completed').length / deals.length) * 100)}%` : '0%', 
+      icon: Shield, 
+      color: 'text-orange-600' 
+    }
   ];
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-center min-h-96">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* Success Message */}
+        {successMessage && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+              <p className="text-green-700">{successMessage}</p>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -129,6 +200,13 @@ const DealDashboardPage = () => {
             </div>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <p className="text-red-600">{error}</p>
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -232,20 +310,20 @@ const DealDashboardPage = () => {
                         <div className="flex items-center space-x-3 mb-2">
                           <h3 className="text-lg font-semibold text-gray-900">{deal.title}</h3>
                           <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(deal.status)}`}>
-                            {deal.status.replace('-', ' ').toUpperCase()}
+                            {formatStatus(deal.status)}
                           </span>
                         </div>
                         <div className="flex items-center space-x-4 text-sm text-gray-600">
-                          <span>Deal ID: {deal.id}</span>
+                          <span>Deal ID: {deal.dealId}</span>
                           <span>•</span>
                           <span>Role: {deal.role}</span>
                           <span>•</span>
-                          <span>With: {deal.counterparty}</span>
+                          <span>With: {deal.role === 'buyer' ? deal.seller.fullName : deal.buyer.fullName}</span>
                         </div>
                       </div>
                       <div className="text-right">
                         <div className="text-2xl font-bold text-gray-900">₹{deal.amount.toLocaleString()}</div>
-                        <div className="text-sm text-gray-500">Created: {deal.createdAt}</div>
+                        <div className="text-sm text-gray-500">Created: {new Date(deal.createdAt).toLocaleDateString()}</div>
                       </div>
                     </div>
 

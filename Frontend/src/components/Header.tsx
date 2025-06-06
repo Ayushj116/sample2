@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Shield, Menu, X, ChevronDown } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Shield, Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 const Header = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isServicesOpen, setIsServicesOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAuthenticated, logout } = useAuth();
 
   const navItems = [
     { name: 'How It Works', path: '/how-it-works' },
@@ -21,6 +25,12 @@ const Header = () => {
     },
     { name: 'Support', path: '/support' }
   ];
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+    setIsUserMenuOpen(false);
+  };
 
   return (
     <header className="bg-white shadow-lg sticky top-0 z-50">
@@ -78,20 +88,77 @@ const Header = () => {
             ))}
           </div>
 
-          {/* Auth Buttons */}
+          {/* Auth Section */}
           <div className="hidden md:flex items-center space-x-4">
-            <Link
-              to="/sign-in"
-              className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
-            >
-              Sign In
-            </Link>
-            <Link
-              to="/create-deal"
-              className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-            >
-              Start Deal
-            </Link>
+            {isAuthenticated ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                  className="flex items-center space-x-2 text-gray-700 hover:text-blue-600 transition-colors"
+                >
+                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    {user?.avatar ? (
+                      <img src={user.avatar} alt="Profile" className="w-8 h-8 rounded-full" />
+                    ) : (
+                      <User className="w-4 h-4 text-blue-600" />
+                    )}
+                  </div>
+                  <span className="font-medium">{user?.firstName}</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+                
+                {isUserMenuOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2">
+                    <Link
+                      to="/dashboard"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/kyc"
+                      className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                      onClick={() => setIsUserMenuOpen(false)}
+                    >
+                      KYC Verification
+                    </Link>
+                    {user?.isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        Admin Panel
+                      </Link>
+                    )}
+                    <hr className="my-2" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center"
+                    >
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <Link
+                  to="/sign-in"
+                  className="text-gray-700 hover:text-blue-600 font-medium transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/create-deal"
+                  className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                >
+                  Start Deal
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu button */}
@@ -150,21 +217,61 @@ const Header = () => {
                   )}
                 </div>
               ))}
+              
               <div className="border-t border-gray-200 pt-4 pb-3">
-                <Link
-                  to="/sign-in"
-                  className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Sign In
-                </Link>
-                <Link
-                  to="/create-deal"
-                  className="block mx-3 mt-2 px-3 py-2 text-base font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center"
-                  onClick={() => setIsMobileMenuOpen(false)}
-                >
-                  Start Deal
-                </Link>
+                {isAuthenticated ? (
+                  <>
+                    <div className="px-3 py-2 text-base font-medium text-gray-700">
+                      Hello, {user?.firstName}
+                    </div>
+                    <Link
+                      to="/dashboard"
+                      className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Dashboard
+                    </Link>
+                    <Link
+                      to="/kyc"
+                      className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      KYC Verification
+                    </Link>
+                    {user?.isAdmin && (
+                      <Link
+                        to="/admin"
+                        className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        Admin Panel
+                      </Link>
+                    )}
+                    <button
+                      onClick={handleLogout}
+                      className="block w-full text-left px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                    >
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      to="/sign-in"
+                      className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      to="/create-deal"
+                      className="block mx-3 mt-2 px-3 py-2 text-base font-medium bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-center"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Start Deal
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
