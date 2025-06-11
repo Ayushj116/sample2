@@ -4,7 +4,6 @@ import { body } from 'express-validator';
 import {
   register,
   login,
-  verifyEmail,
   verifyPhone,
   forgotPassword,
   resetPassword,
@@ -22,7 +21,6 @@ const authLimiter = rateLimit({
 const registerValidation = [
   body('firstName').trim().isLength({ min: 2, max: 50 }).withMessage('First name must be 2-50 characters'),
   body('lastName').trim().isLength({ min: 2, max: 50 }).withMessage('Last name must be 2-50 characters'),
-  body('email').isEmail().normalizeEmail().withMessage('Please provide a valid email'),
   body('phone').matches(/^[6-9]\d{9}$/).withMessage('Please provide a valid Indian mobile number'),
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/).withMessage('Password must contain at least one uppercase letter, one lowercase letter, and one number'),
@@ -31,14 +29,12 @@ const registerValidation = [
 ];
 
 const loginValidation = [
-  body('email').optional().isEmail().normalizeEmail(),
-  body('phone').optional().matches(/^[6-9]\d{9}$/),
+  body('phone').matches(/^[6-9]\d{9}$/).withMessage('Please provide a valid Indian mobile number'),
   body('password').notEmpty().withMessage('Password is required')
 ];
 
 router.post('/register', authLimiter, registerValidation, register);
 router.post('/login', authLimiter, loginValidation, login);
-router.post('/verify-email', verifyEmail);
 router.post('/verify-phone', verifyPhone);
 router.post('/forgot-password', authLimiter, forgotPassword);
 router.post('/reset-password', resetPassword);

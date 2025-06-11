@@ -66,8 +66,6 @@ export interface CreateDealRequest {
   deliveryMethod: string;
   inspectionPeriod: number;
   additionalTerms?: string;
-  buyerEmail?: string;
-  sellerEmail?: string;
   buyerPhone?: string;
   sellerPhone?: string;
   buyerName?: string;

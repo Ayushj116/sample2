@@ -5,11 +5,9 @@ export interface User {
   firstName: string;
   lastName: string;
   fullName: string;
-  email: string;
   phone: string;
   userType: 'personal' | 'business';
   businessName?: string;
-  emailVerified: boolean;
   phoneVerified: boolean;
   kycStatus: 'pending' | 'in_progress' | 'approved' | 'rejected';
   isAdmin: boolean;
@@ -18,7 +16,6 @@ export interface User {
 }
 
 export interface LoginRequest {
-  email?: string;
   phone?: string;
   password: string;
 }
@@ -26,8 +23,7 @@ export interface LoginRequest {
 export interface RegisterRequest {
   firstName: string;
   lastName: string;
-  email?: string;
-  phone?: string;
+  phone: string;
   password: string;
   userType: 'personal' | 'business';
   businessName?: string;
@@ -67,16 +63,12 @@ export const authService = {
     return response;
   },
 
-  async forgotPassword(email: string): Promise<{ success: boolean; message: string }> {
-    return api.post('/auth/forgot-password', { email });
+  async forgotPassword(phone: string): Promise<{ success: boolean; message: string }> {
+    return api.post('/auth/forgot-password', { phone });
   },
 
   async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
     return api.post('/auth/reset-password', { token, newPassword });
-  },
-
-  async verifyEmail(email: string, otp: string): Promise<{ success: boolean; message: string }> {
-    return api.post('/auth/verify-email', { email, otp });
   },
 
   async verifyPhone(phone: string, otp: string): Promise<{ success: boolean; message: string }> {

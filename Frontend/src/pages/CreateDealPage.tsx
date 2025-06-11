@@ -14,12 +14,10 @@ const CreateDealPage = () => {
     itemTitle: '',
     itemDescription: '',
     dealAmount: '',
-    sellerEmail: '',
-    buyerEmail: '',
-    sellerName: '',
-    buyerName: '',
     sellerPhone: '',
     buyerPhone: '',
+    sellerName: '',
+    buyerName: '',
     deliveryMethod: '',
     inspectionPeriod: '3',
     additionalTerms: '',
@@ -70,11 +68,17 @@ const CreateDealPage = () => {
         break;
       case 2:
         if (formData.userRole === 'buyer') {
-          if (!formData.sellerEmail.trim()) newErrors.sellerEmail = 'Seller email is required';
+          if (!formData.sellerPhone.trim()) newErrors.sellerPhone = 'Seller phone is required';
           if (!formData.sellerName.trim()) newErrors.sellerName = 'Seller name is required';
+          if (formData.sellerPhone && !/^[6-9]\d{9}$/.test(formData.sellerPhone)) {
+            newErrors.sellerPhone = 'Please enter a valid Indian mobile number';
+          }
         } else {
-          if (!formData.buyerEmail.trim()) newErrors.buyerEmail = 'Buyer email is required';
+          if (!formData.buyerPhone.trim()) newErrors.buyerPhone = 'Buyer phone is required';
           if (!formData.buyerName.trim()) newErrors.buyerName = 'Buyer name is required';
+          if (formData.buyerPhone && !/^[6-9]\d{9}$/.test(formData.buyerPhone)) {
+            newErrors.buyerPhone = 'Please enter a valid Indian mobile number';
+          }
         }
         break;
       case 3:
@@ -117,13 +121,11 @@ const CreateDealPage = () => {
         additionalTerms: formData.additionalTerms,
         userRole: formData.userRole,
         ...(formData.userRole === 'buyer' ? {
-          sellerEmail: formData.sellerEmail,
-          sellerName: formData.sellerName,
-          sellerPhone: formData.sellerPhone
+          sellerPhone: formData.sellerPhone,
+          sellerName: formData.sellerName
         } : {
-          buyerEmail: formData.buyerEmail,
-          buyerName: formData.buyerName,
-          buyerPhone: formData.buyerPhone
+          buyerPhone: formData.buyerPhone,
+          buyerName: formData.buyerName
         })
       };
 
@@ -377,27 +379,8 @@ const CreateDealPage = () => {
                 </div>
 
                 <div>
-                  <label htmlFor={formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail'} className="block text-sm font-medium text-gray-700 mb-2">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    id={formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail'}
-                    name={formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail'}
-                    value={formData.userRole === 'buyer' ? formData.sellerEmail : formData.buyerEmail}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                      errors[formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail'] ? 'border-red-300' : 'border-gray-300'
-                    }`}
-                  />
-                  {errors[formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail'] && (
-                    <p className="mt-1 text-sm text-red-600">{errors[formData.userRole === 'buyer' ? 'sellerEmail' : 'buyerEmail']}</p>
-                  )}
-                </div>
-
-                <div>
                   <label htmlFor={formData.userRole === 'buyer' ? 'sellerPhone' : 'buyerPhone'} className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone Number (Optional)
+                    Phone Number *
                   </label>
                   <input
                     type="tel"
@@ -405,9 +388,18 @@ const CreateDealPage = () => {
                     name={formData.userRole === 'buyer' ? 'sellerPhone' : 'buyerPhone'}
                     value={formData.userRole === 'buyer' ? formData.sellerPhone : formData.buyerPhone}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder="+91 98765 43210"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors[formData.userRole === 'buyer' ? 'sellerPhone' : 'buyerPhone'] ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="9876543210"
+                    maxLength={10}
                   />
+                  {errors[formData.userRole === 'buyer' ? 'sellerPhone' : 'buyerPhone'] && (
+                    <p className="mt-1 text-sm text-red-600">{errors[formData.userRole === 'buyer' ? 'sellerPhone' : 'buyerPhone']}</p>
+                  )}
+                  <p className="text-sm text-gray-500 mt-1">
+                    Enter 10-digit Indian mobile number
+                  </p>
                 </div>
               </div>
             )}
@@ -550,7 +542,7 @@ const CreateDealPage = () => {
                       <div>
                         <h3 className="font-semibold text-yellow-900 mb-1">Next Steps</h3>
                         <p className="text-yellow-800 text-sm">
-                          After submitting, the {formData.userRole === 'buyer' ? 'seller' : 'buyer'} will receive an email invitation to accept this deal. 
+                          After submitting, the {formData.userRole === 'buyer' ? 'seller' : 'buyer'} will receive an SMS invitation to accept this deal. 
                           Both parties will then need to complete KYC verification before the transaction can proceed.
                         </p>
                       </div>

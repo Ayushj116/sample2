@@ -1,7 +1,6 @@
 import { body, validationResult, param } from 'express-validator';
 import Deal from '../models/Deal.js';
 import User from '../models/User.js';
-import { sendEmail } from '../services/emailService.js';
 import { sendSMS } from '../services/smsService.js';
 import { calculateEscrowFee } from '../utils/feeCalculator.js';
 
@@ -25,8 +24,6 @@ export const createDeal = async (req, res) => {
       deliveryMethod,
       inspectionPeriod,
       additionalTerms,
-      buyerEmail,
-      sellerEmail,
       buyerPhone,
       sellerPhone,
       buyerName,
@@ -49,17 +46,15 @@ export const createDeal = async (req, res) => {
     if (userRole === 'buyer') {
       buyer = initiator._id;
       
-      if (sellerEmail) {
-        seller = await User.findOne({ email: sellerEmail });
+      if (sellerPhone) {
+        seller = await User.findOne({ phone: sellerPhone });
         if (!seller) {
           seller = new User({
             firstName: sellerName?.split(' ')[0] || 'Seller',
             lastName: sellerName?.split(' ').slice(1).join(' ') || 'User',
-            email: sellerEmail,
-            phone: sellerPhone || '0000000000',
+            phone: sellerPhone,
             password: Math.random().toString(36).slice(-8),
             userType: 'personal',
-            emailVerified: false,
             phoneVerified: false
           });
           await seller.save();
@@ -68,23 +63,21 @@ export const createDeal = async (req, res) => {
       } else {
         return res.status(400).json({
           success: false,
-          message: 'Seller email is required'
+          message: 'Seller phone is required'
         });
       }
     } else {
       seller = initiator._id;
       
-      if (buyerEmail) {
-        buyer = await User.findOne({ email: buyerEmail });
+      if (buyerPhone) {
+        buyer = await User.findOne({ phone: buyerPhone });
         if (!buyer) {
           buyer = new User({
             firstName: buyerName?.split(' ')[0] || 'Buyer',
             lastName: buyerName?.split(' ').slice(1).join(' ') || 'User',
-            email: buyerEmail,
-            phone: buyerPhone || '0000000000',
+            phone: buyerPhone,
             password: Math.random().toString(36).slice(-8),
             userType: 'personal',
-            emailVerified: false,
             phoneVerified: false
           });
           await buyer.save();
@@ -93,7 +86,7 @@ export const createDeal = async (req, res) => {
       } else {
         return res.status(400).json({
           success: false,
-          message: 'Buyer email is required'
+          message: 'Buyer phone is required'
         });
       }
     }
@@ -131,24 +124,10 @@ export const createDeal = async (req, res) => {
     const counterparty = userRole === 'buyer' ? deal.seller : deal.buyer;
     
     try {
-      await sendEmail({
-        to: counterparty.email,
-        subject: 'New Escrow Deal Invitation - Safe Transfer',
-        template: 'deal_invitation',
-        data: {
-          dealId: deal.dealId,
-          title: deal.title,
-          amount: deal.amount,
-          initiatorName: initiator.fullName,
-          role: userRole === 'buyer' ? 'seller' : 'buyer',
-          dealLink: `${process.env.FRONTEND_URL}/deal/${deal._id}`
-        }
-      });
-
-      if (counterparty.phone && counterparty.phone !== '0000000000') {
+      if (counterparty.phone) {
         await sendSMS({
           to: counterparty.phone,
-          message: `New escrow deal invitation from ${initiator.fullName} for ₹${amount.toLocaleString()}. Deal ID: ${deal.dealId}. Login to Safe Transfer to view details.`
+          message: `New escrow deal invitation from ${initiator.fullName} for ₹${amount.toLocaleString()}. Deal ID: ${deal.dealId}. Download Safe Transfer app to view details.`
         });
       }
     } catch (notificationError) {
@@ -393,17 +372,12 @@ export const acceptDeal = async (req, res) => {
     const user = await User.findById(req.user.userId);
 
     try {
-      await sendEmail({
-        to: counterparty.email,
-        subject: 'Deal Accepted - Safe Transfer',
-        template: 'deal_accepted',
-        data: {
-          dealId: deal.dealId,
-          title: deal.title,
-          acceptedBy: user.fullName,
-          dealLink: `${process.env.FRONTEND_URL}/deal/${deal._id}`
-        }
-      });
+      if (counterparty.phone) {
+        await sendSMS({
+          to: counterparty.phone,
+          message: `Deal ${deal.dealId} accepted by ${user.fullName}. Next step: Complete KYC verification.`
+        });
+      }
     } catch (notificationError) {
       console.error('Failed to send acceptance notification:', notificationError);
     }
@@ -472,18 +446,12 @@ export const addMessage = async (req, res) => {
     const sender = await User.findById(req.user.userId);
 
     try {
-      await sendEmail({
-        to: counterpartyUser.email,
-        subject: 'New Message - Safe Transfer',
-        template: 'new_message',
-        data: {
-          dealId: deal.dealId,
-          title: deal.title,
-          senderName: sender.fullName,
-          message: req.body.message,
-          dealLink: `${process.env.FRONTEND_URL}/deal/${deal._id}`
-        }
-      });
+      if (counterpartyUser.phone) {
+        await sendSMS({
+          to: counterpartyUser.phone,
+          message: `New message from ${sender.fullName} in deal ${deal.dealId}: ${req.body.message.substring(0, 100)}${req.body.message.length > 100 ? '...' : ''}`
+        });
+      }
     } catch (notificationError) {
       console.error('Failed to send message notification:', notificationError);
     }

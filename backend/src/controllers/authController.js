@@ -2,7 +2,6 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
-import { sendEmail } from '../services/emailService.js';
 import { sendSMS } from '../services/smsService.js';
 
 const generateToken = (userId) => {
@@ -31,7 +30,6 @@ export const register = async (req, res) => {
     const {
       firstName,
       lastName,
-      email,
       phone,
       password,
       userType,
@@ -40,21 +38,18 @@ export const register = async (req, res) => {
       gstin
     } = req.body;
 
-    const existingUser = await User.findOne({
-      $or: [{ email }, { phone }]
-    });
+    const existingUser = await User.findOne({ phone });
 
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        message: 'User already exists with this email or phone number'
+        message: 'User already exists with this phone number'
       });
     }
 
     const userData = {
       firstName,
       lastName,
-      email,
       phone,
       password,
       userType
@@ -76,25 +71,10 @@ export const register = async (req, res) => {
     await user.save();
 
     // For demo purposes, mark as verified
-    user.emailVerified = true;
     user.phoneVerified = true;
     await user.save();
 
     const token = generateToken(user._id);
-
-    try {
-      await sendEmail({
-        to: email,
-        subject: 'Welcome to Safe Transfer',
-        template: 'welcome',
-        data: {
-          firstName,
-          userType
-        }
-      });
-    } catch (emailError) {
-      console.error('Failed to send welcome email:', emailError);
-    }
 
     try {
       await sendSMS({
@@ -134,10 +114,9 @@ export const login = async (req, res) => {
       });
     }
 
-    const { email, phone, password } = req.body;
+    const { phone, password } = req.body;
 
-    const query = email ? { email } : { phone };
-    const user = await User.findOne(query);
+    const user = await User.findOne({ phone });
 
     if (!user) {
       return res.status(401).json({
@@ -191,42 +170,6 @@ export const login = async (req, res) => {
   }
 };
 
-export const verifyEmail = async (req, res) => {
-  try {
-    const { email, otp } = req.body;
-
-    if (!otp || otp.length !== 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid OTP'
-      });
-    }
-
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
-    }
-
-    user.emailVerified = true;
-    await user.save();
-
-    res.json({
-      success: true,
-      message: 'Email verified successfully'
-    });
-
-  } catch (error) {
-    console.error('Email verification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error'
-    });
-  }
-};
-
 export const verifyPhone = async (req, res) => {
   try {
     const { phone, otp } = req.body;
@@ -265,20 +208,20 @@ export const verifyPhone = async (req, res) => {
 
 export const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { phone } = req.body;
 
-    if (!email) {
+    if (!phone) {
       return res.status(400).json({
         success: false,
-        message: 'Email is required'
+        message: 'Phone number is required'
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ phone });
     if (!user) {
       return res.json({
         success: true,
-        message: 'If an account with this email exists, you will receive a password reset link'
+        message: 'If an account with this phone number exists, you will receive an OTP'
       });
     }
 
@@ -288,27 +231,27 @@ export const forgotPassword = async (req, res) => {
       { expiresIn: '1h' }
     );
 
+    const otp = generateOTP();
+
     try {
-      await sendEmail({
-        to: email,
-        subject: 'Password Reset - Safe Transfer',
-        template: 'password_reset',
-        data: {
-          firstName: user.firstName,
-          resetLink: `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`
-        }
+      await sendSMS({
+        to: phone,
+        message: `Your Safe Transfer password reset OTP is: ${otp}. This OTP will expire in 10 minutes. Do not share this with anyone.`
       });
-    } catch (emailError) {
-      console.error('Failed to send password reset email:', emailError);
+    } catch (smsError) {
+      console.error('Failed to send password reset SMS:', smsError);
       return res.status(500).json({
         success: false,
-        message: 'Failed to send password reset email'
+        message: 'Failed to send password reset OTP'
       });
     }
 
     res.json({
       success: true,
-      message: 'Password reset link sent to your email'
+      message: 'Password reset OTP sent to your phone',
+      data: {
+        resetToken // In production, don't send this. Store it temporarily in database
+      }
     });
 
   } catch (error) {

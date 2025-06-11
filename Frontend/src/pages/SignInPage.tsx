@@ -6,7 +6,6 @@ import {
   Eye, 
   EyeOff, 
   Smartphone,
-  Mail,
   Lock,
   User,
   Building,
@@ -20,7 +19,6 @@ const SignInPage = () => {
   const [userType, setUserType] = useState('personal');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loginMethod, setLoginMethod] = useState('email');
   const [isLoading, setIsLoading] = useState(false);
   
   const navigate = useNavigate();
@@ -30,7 +28,6 @@ const SignInPage = () => {
   const from = location.state?.from?.pathname || '/dashboard';
   
   const [formData, setFormData] = useState({
-    email: '',
     phone: '',
     password: '',
     confirmPassword: '',
@@ -75,18 +72,10 @@ const SignInPage = () => {
       }
     }
 
-    if (loginMethod === 'email') {
-      if (!formData.email) {
-        newErrors.email = 'Email is required';
-      } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-        newErrors.email = 'Please enter a valid email';
-      }
-    } else {
-      if (!formData.phone) {
-        newErrors.phone = 'Phone number is required';
-      } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
-        newErrors.phone = 'Please enter a valid Indian mobile number';
-      }
+    if (!formData.phone) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+      newErrors.phone = 'Please enter a valid Indian mobile number';
     }
 
     if (!formData.password) {
@@ -109,19 +98,15 @@ const SignInPage = () => {
     
     try {
       if (activeTab === 'signin') {
-        const loginData = loginMethod === 'email' 
-          ? { email: formData.email, password: formData.password }
-          : { phone: formData.phone, password: formData.password };
-        
-        await login(loginData.email || '', loginData.password);
+        await login('', formData.password, formData.phone);
         navigate(from, { replace: true });
       } else {
         const registerData = {
           firstName: formData.firstName,
           lastName: formData.lastName,
+          phone: formData.phone,
           password: formData.password,
           userType: userType as 'personal' | 'business',
-          ...(loginMethod === 'email' ? { email: formData.email } : { phone: formData.phone }),
           ...(userType === 'business' && {
             businessName: formData.businessName,
             businessType: formData.businessType,
@@ -234,46 +219,13 @@ const SignInPage = () => {
             </div>
           )}
 
-          {/* Login Method Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              {activeTab === 'signin' ? 'Sign in with' : 'Sign up with'}
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setLoginMethod('email')}
-                className={`p-3 rounded-lg border-2 transition-colors ${
-                  loginMethod === 'email'
-                    ? 'border-blue-600 bg-blue-50 text-blue-600'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Mail className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-sm font-medium">Email</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoginMethod('phone')}
-                className={`p-3 rounded-lg border-2 transition-colors ${
-                  loginMethod === 'phone'
-                    ? 'border-blue-600 bg-blue-50 text-blue-600'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <Smartphone className="w-5 h-5 mx-auto mb-1" />
-                <div className="text-sm font-medium">Phone</div>
-              </button>
-            </div>
-          </div>
-
           <form className="space-y-6" onSubmit={handleSubmit}>
             {/* Name Fields for Signup */}
             {activeTab === 'signup' && (
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label htmlFor="firstName\" className="block text-sm font-medium text-gray-700">
+                    <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
                       First Name *
                     </label>
                     <input
@@ -374,27 +326,34 @@ const SignInPage = () => {
               </>
             )}
 
-            {/* Email/Phone Field */}
+            {/* Phone Field */}
             <div>
-              <label htmlFor={loginMethod} className="block text-sm font-medium text-gray-700">
-                {loginMethod === 'email' ? 'Email Address' : 'Mobile Number'} *
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                <div className="flex items-center space-x-2">
+                  <Smartphone className="w-4 h-4" />
+                  <span>Mobile Number *</span>
+                </div>
               </label>
               <input
-                id={loginMethod}
-                name={loginMethod}
-                type={loginMethod === 'email' ? 'email' : 'tel'}
-                autoComplete={loginMethod}
+                id="phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
                 required
-                value={formData[loginMethod as keyof typeof formData] as string}
+                value={formData.phone}
                 onChange={handleInputChange}
                 className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
-                  errors[loginMethod] ? 'border-red-300' : 'border-gray-300'
+                  errors.phone ? 'border-red-300' : 'border-gray-300'
                 }`}
-                placeholder={loginMethod === 'email' ? 'you@example.com' : '9876543210'}
+                placeholder="9876543210"
+                maxLength={10}
               />
-              {errors[loginMethod] && (
-                <p className="mt-1 text-sm text-red-600">{errors[loginMethod]}</p>
+              {errors.phone && (
+                <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
               )}
+              <p className="mt-1 text-sm text-gray-500">
+                Enter your 10-digit Indian mobile number
+              </p>
             </div>
 
             {/* Password Field */}

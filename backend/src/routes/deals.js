@@ -18,8 +18,6 @@ const createDealValidation = [
   body('amount').isFloat({ min: 1000, max: 100000000 }).withMessage('Amount must be between ₹1,000 and ₹10 crores'),
   body('deliveryMethod').isIn(['in_person', 'courier', 'digital', 'other']).withMessage('Invalid delivery method'),
   body('inspectionPeriod').isInt({ min: 1, max: 30 }).withMessage('Inspection period must be 1-30 days'),
-  body('buyerEmail').optional().isEmail().withMessage('Invalid buyer email'),
-  body('sellerEmail').optional().isEmail().withMessage('Invalid seller email'),
   body('buyerPhone').optional().matches(/^[6-9]\d{9}$/).withMessage('Invalid buyer phone'),
   body('sellerPhone').optional().matches(/^[6-9]\d{9}$/).withMessage('Invalid seller phone')
 ];

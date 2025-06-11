@@ -14,13 +14,6 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: 50
   },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    trim: true
-  },
   phone: {
     type: String,
     required: true,
@@ -51,10 +44,6 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     match: /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
-  },
-  emailVerified: {
-    type: Boolean,
-    default: false
   },
   phoneVerified: {
     type: Boolean,
@@ -138,10 +127,6 @@ const userSchema = new mongoose.Schema({
     }
   },
   notifications: {
-    email: {
-      type: Boolean,
-      default: true
-    },
     sms: {
       type: Boolean,
       default: true
@@ -167,7 +152,6 @@ const userSchema = new mongoose.Schema({
 });
 
 // Indexes
-userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ kycStatus: 1 });
 userSchema.index({ userType: 1 });
