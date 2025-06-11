@@ -295,8 +295,10 @@ dealSchema.index({ flagged: 1 });
 // Pre-save middleware to generate deal ID
 dealSchema.pre('save', async function(next) {
   if (!this.dealId) {
-    const count = await mongoose.model('Deal').countDocuments();
-    this.dealId = `ST${String(count + 1).padStart(6, '0')}`;
+    // Generate a more unique deal ID using timestamp and random number
+    const timestamp = Date.now().toString(36);
+    const random = Math.random().toString(36).substr(2, 5);
+    this.dealId = `ST${timestamp}${random}`.toUpperCase();
   }
   
   this.updatedAt = Date.now();

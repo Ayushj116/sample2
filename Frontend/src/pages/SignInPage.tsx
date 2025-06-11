@@ -98,7 +98,7 @@ const SignInPage = () => {
     
     try {
       if (activeTab === 'signin') {
-        await login('', formData.password, formData.phone);
+        await login(formData.phone, formData.password);
         navigate(from, { replace: true });
       } else {
         const registerData = {
@@ -118,6 +118,7 @@ const SignInPage = () => {
         navigate('/dashboard', { replace: true });
       }
     } catch (error) {
+      console.error('Auth error:', error);
       if (error instanceof ApiError) {
         if (error.data?.errors) {
           // Handle validation errors
@@ -129,6 +130,8 @@ const SignInPage = () => {
         } else {
           setErrors({ general: error.message });
         }
+      } else if (error instanceof Error) {
+        setErrors({ general: error.message });
       } else {
         setErrors({ general: 'Something went wrong. Please try again.' });
       }
