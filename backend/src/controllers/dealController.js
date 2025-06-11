@@ -31,6 +31,78 @@ export const createDeal = async (req, res) => {
       userRole
     } = req.body;
 
+    // Additional server-side validation
+    const validationErrors = [];
+
+    if (!title || title.trim().length === 0) {
+      validationErrors.push({ field: 'title', message: 'Title is required' });
+    } else if (title.length > 200) {
+      validationErrors.push({ field: 'title', message: 'Title must be 200 characters or less' });
+    }
+
+    if (!description || description.trim().length === 0) {
+      validationErrors.push({ field: 'description', message: 'Description is required' });
+    } else if (description.length < 10) {
+      validationErrors.push({ field: 'description', message: 'Description must be at least 10 characters' });
+    } else if (description.length > 2000) {
+      validationErrors.push({ field: 'description', message: 'Description must be 2000 characters or less' });
+    }
+
+    if (!category) {
+      validationErrors.push({ field: 'category', message: 'Category is required' });
+    } else if (!['vehicle', 'real_estate', 'domain', 'freelancing', 'other'].includes(category)) {
+      validationErrors.push({ field: 'category', message: 'Invalid category' });
+    }
+
+    if (!amount || isNaN(amount) || amount < 1000) {
+      validationErrors.push({ field: 'amount', message: 'Amount must be at least ₹1,000' });
+    } else if (amount > 100000000) {
+      validationErrors.push({ field: 'amount', message: 'Amount must be less than ₹10 crores' });
+    }
+
+    if (!deliveryMethod) {
+      validationErrors.push({ field: 'deliveryMethod', message: 'Delivery method is required' });
+    } else if (!['in_person', 'courier', 'digital', 'other'].includes(deliveryMethod)) {
+      validationErrors.push({ field: 'deliveryMethod', message: 'Invalid delivery method' });
+    }
+
+    if (!inspectionPeriod || isNaN(inspectionPeriod) || inspectionPeriod < 1 || inspectionPeriod > 30) {
+      validationErrors.push({ field: 'inspectionPeriod', message: 'Inspection period must be between 1-30 days' });
+    }
+
+    if (additionalTerms && additionalTerms.length > 1000) {
+      validationErrors.push({ field: 'additionalTerms', message: 'Additional terms must be 1000 characters or less' });
+    }
+
+    if (!userRole || !['buyer', 'seller'].includes(userRole)) {
+      validationErrors.push({ field: 'userRole', message: 'User role must be buyer or seller' });
+    }
+
+    // Validate counterparty information
+    if (userRole === 'buyer') {
+      if (!sellerPhone || !/^[6-9]\d{9}$/.test(sellerPhone)) {
+        validationErrors.push({ field: 'sellerPhone', message: 'Valid seller phone number is required' });
+      }
+      if (!sellerName || sellerName.trim().length === 0) {
+        validationErrors.push({ field: 'sellerName', message: 'Seller name is required' });
+      }
+    } else {
+      if (!buyerPhone || !/^[6-9]\d{9}$/.test(buyerPhone)) {
+        validationErrors.push({ field: 'buyerPhone', message: 'Valid buyer phone number is required' });
+      }
+      if (!buyerName || buyerName.trim().length === 0) {
+        validationErrors.push({ field: 'buyerName', message: 'Buyer name is required' });
+      }
+    }
+
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors
+      });
+    }
+
     const initiator = await User.findById(req.user.userId);
     if (!initiator) {
       return res.status(404).json({
@@ -92,16 +164,16 @@ export const createDeal = async (req, res) => {
     }
 
     const deal = new Deal({
-      title,
-      description,
+      title: title.trim(),
+      description: description.trim(),
       category,
-      subcategory,
-      amount,
+      subcategory: subcategory?.trim() || '',
+      amount: Number(amount),
       escrowFee: feeCalculation.baseFee,
       escrowFeePercentage: feeCalculation.percentage,
       deliveryMethod,
-      inspectionPeriod,
-      additionalTerms,
+      inspectionPeriod: Number(inspectionPeriod),
+      additionalTerms: additionalTerms?.trim() || '',
       buyer,
       seller,
       initiatedBy: initiator._id,
@@ -155,9 +227,34 @@ export const createDeal = async (req, res) => {
 
   } catch (error) {
     console.error('Create deal error:', error);
+    
+    // Handle specific MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors
+      });
+    }
+
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Duplicate entry detected',
+        errors: [{ field: 'general', message: 'This deal already exists' }]
+      });
+    }
+
     res.status(500).json({
       success: false,
-      message: 'Internal server error'
+      message: 'Internal server error',
+      errors: [{ field: 'general', message: 'Something went wrong. Please try again.' }]
     });
   }
 };

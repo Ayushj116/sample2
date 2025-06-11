@@ -23,29 +23,35 @@ const dealSchema = new mongoose.Schema({
   },
   title: {
     type: String,
-    required: true,
+    required: [true, 'Title is required'],
     trim: true,
-    maxlength: 200
+    minlength: [5, 'Title must be at least 5 characters'],
+    maxlength: [200, 'Title must be 200 characters or less']
   },
   description: {
     type: String,
-    required: true,
-    maxlength: 2000
+    required: [true, 'Description is required'],
+    minlength: [10, 'Description must be at least 10 characters'],
+    maxlength: [2000, 'Description must be 2000 characters or less']
   },
   category: {
     type: String,
-    enum: ['vehicle', 'real_estate', 'domain', 'freelancing', 'other'],
-    required: true
+    enum: {
+      values: ['vehicle', 'real_estate', 'domain', 'freelancing', 'other'],
+      message: 'Invalid category'
+    },
+    required: [true, 'Category is required']
   },
   subcategory: {
     type: String,
-    trim: true
+    trim: true,
+    maxlength: [100, 'Subcategory must be 100 characters or less']
   },
   amount: {
     type: Number,
-    required: true,
-    min: 1000,
-    max: 100000000
+    required: [true, 'Amount is required'],
+    min: [1000, 'Amount must be at least ₹1,000'],
+    max: [100000000, 'Amount must be less than ₹10 crores']
   },
   currency: {
     type: String,
@@ -62,18 +68,22 @@ const dealSchema = new mongoose.Schema({
   },
   deliveryMethod: {
     type: String,
-    enum: ['in_person', 'courier', 'digital', 'other'],
-    required: true
+    enum: {
+      values: ['in_person', 'courier', 'digital', 'other'],
+      message: 'Invalid delivery method'
+    },
+    required: [true, 'Delivery method is required']
   },
   inspectionPeriod: {
     type: Number,
-    required: true,
-    min: 1,
-    max: 30
+    required: [true, 'Inspection period is required'],
+    min: [1, 'Inspection period must be at least 1 day'],
+    max: [30, 'Inspection period must be 30 days or less']
   },
   additionalTerms: {
     type: String,
-    maxlength: 1000
+    maxlength: [1000, 'Additional terms must be 1000 characters or less'],
+    default: ''
   },
   status: {
     type: String,

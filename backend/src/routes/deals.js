@@ -12,14 +12,41 @@ import {
 const router = express.Router();
 
 const createDealValidation = [
-  body('title').trim().isLength({ min: 5, max: 200 }).withMessage('Title must be 5-200 characters'),
-  body('description').trim().isLength({ min: 10, max: 2000 }).withMessage('Description must be 10-2000 characters'),
-  body('category').isIn(['vehicle', 'real_estate', 'domain', 'freelancing', 'other']).withMessage('Invalid category'),
-  body('amount').isFloat({ min: 1000, max: 100000000 }).withMessage('Amount must be between ₹1,000 and ₹10 crores'),
-  body('deliveryMethod').isIn(['in_person', 'courier', 'digital', 'other']).withMessage('Invalid delivery method'),
-  body('inspectionPeriod').isInt({ min: 1, max: 30 }).withMessage('Inspection period must be 1-30 days'),
-  body('buyerPhone').optional().matches(/^[6-9]\d{9}$/).withMessage('Invalid buyer phone'),
-  body('sellerPhone').optional().matches(/^[6-9]\d{9}$/).withMessage('Invalid seller phone')
+  body('title')
+    .trim()
+    .isLength({ min: 5, max: 200 })
+    .withMessage('Title must be 5-200 characters'),
+  body('description')
+    .trim()
+    .isLength({ min: 10, max: 2000 })
+    .withMessage('Description must be 10-2000 characters'),
+  body('category')
+    .isIn(['vehicle', 'real_estate', 'domain', 'freelancing', 'other'])
+    .withMessage('Invalid category'),
+  body('amount')
+    .isFloat({ min: 1000, max: 100000000 })
+    .withMessage('Amount must be between ₹1,000 and ₹10 crores'),
+  body('deliveryMethod')
+    .isIn(['in_person', 'courier', 'digital', 'other'])
+    .withMessage('Invalid delivery method'),
+  body('inspectionPeriod')
+    .isInt({ min: 1, max: 30 })
+    .withMessage('Inspection period must be 1-30 days'),
+  body('additionalTerms')
+    .optional()
+    .isLength({ max: 1000 })
+    .withMessage('Additional terms must be 1000 characters or less'),
+  body('buyerPhone')
+    .optional()
+    .matches(/^[6-9]\d{9}$/)
+    .withMessage('Invalid buyer phone'),
+  body('sellerPhone')
+    .optional()
+    .matches(/^[6-9]\d{9}$/)
+    .withMessage('Invalid seller phone'),
+  body('userRole')
+    .isIn(['buyer', 'seller'])
+    .withMessage('User role must be buyer or seller')
 ];
 
 const addMessageValidation = [
