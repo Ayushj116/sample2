@@ -60,10 +60,22 @@ const CreateDealPage = () => {
     switch (step) {
       case 1:
         if (!formData.dealType) newErrors.dealType = 'Please select a deal type';
-        if (!formData.itemTitle.trim()) newErrors.itemTitle = 'Title is required';
-        if (!formData.itemDescription.trim()) newErrors.itemDescription = 'Description is required';
+        if (!formData.itemTitle.trim()) {
+          newErrors.itemTitle = 'Title is required';
+        } else if (formData.itemTitle.length > 200) {
+          newErrors.itemTitle = 'Title must be 200 characters or less';
+        }
+        if (!formData.itemDescription.trim()) {
+          newErrors.itemDescription = 'Description is required';
+        } else if (formData.itemDescription.length < 10) {
+          newErrors.itemDescription = 'Description must be at least 10 characters';
+        } else if (formData.itemDescription.length > 2000) {
+          newErrors.itemDescription = 'Description must be 2000 characters or less';
+        }
         if (!formData.dealAmount || Number(formData.dealAmount) < 1000) {
           newErrors.dealAmount = 'Amount must be at least ₹1,000';
+        } else if (Number(formData.dealAmount) > 100000000) {
+          newErrors.dealAmount = 'Amount must be less than ₹10 crores';
         }
         break;
       case 2:
@@ -83,6 +95,9 @@ const CreateDealPage = () => {
         break;
       case 3:
         if (!formData.deliveryMethod) newErrors.deliveryMethod = 'Please select a delivery method';
+        if (formData.additionalTerms && formData.additionalTerms.length > 1000) {
+          newErrors.additionalTerms = 'Additional terms must be 1000 characters or less';
+        }
         break;
     }
 
@@ -142,11 +157,37 @@ const CreateDealPage = () => {
     } catch (error) {
       if (error instanceof ApiError) {
         if (error.data?.errors) {
+          // Handle validation errors from backend
           const validationErrors: Record<string, string> = {};
           error.data.errors.forEach((err: any) => {
-            validationErrors[err.field] = err.message;
+            // Map backend field names to frontend field names
+            const fieldMapping: Record<string, string> = {
+              'title': 'itemTitle',
+              'description': 'itemDescription',
+              'amount': 'dealAmount',
+              'category': 'dealType',
+              'deliveryMethod': 'deliveryMethod',
+              'inspectionPeriod': 'inspectionPeriod',
+              'additionalTerms': 'additionalTerms',
+              'buyerPhone': 'buyerPhone',
+              'sellerPhone': 'sellerPhone',
+              'buyerName': 'buyerName',
+              'sellerName': 'sellerName'
+            };
+            
+            const frontendField = fieldMapping[err.field] || err.field;
+            validationErrors[frontendField] = err.message;
           });
           setErrors(validationErrors);
+          
+          // Go back to the step that has errors
+          if (validationErrors.dealType || validationErrors.itemTitle || validationErrors.itemDescription || validationErrors.dealAmount) {
+            setCurrentStep(1);
+          } else if (validationErrors.sellerPhone || validationErrors.buyerPhone || validationErrors.sellerName || validationErrors.buyerName) {
+            setCurrentStep(2);
+          } else if (validationErrors.deliveryMethod || validationErrors.additionalTerms) {
+            setCurrentStep(3);
+          }
         } else {
           setErrors({ general: error.message });
         }
@@ -293,10 +334,14 @@ const CreateDealPage = () => {
                       errors.itemTitle ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="e.g., Honda City 2019 Model, 2BHK Apartment in Koramangala"
+                    maxLength={200}
                   />
                   {errors.itemTitle && (
                     <p className="mt-1 text-sm text-red-600">{errors.itemTitle}</p>
                   )}
+                  <p className="mt-1 text-sm text-gray-500">
+                    {formData.itemTitle.length}/200 characters
+                  </p>
                 </div>
 
                 <div>
@@ -313,10 +358,14 @@ const CreateDealPage = () => {
                       errors.itemDescription ? 'border-red-300' : 'border-gray-300'
                     }`}
                     placeholder="Provide detailed description of the item/service..."
+                    maxLength={2000}
                   />
                   {errors.itemDescription && (
                     <p className="mt-1 text-sm text-red-600">{errors.itemDescription}</p>
                   )}
+                  <p className="mt-1 text-sm text-gray-500">
+                    {formData.itemDescription.length}/2000 characters
+                  </p>
                 </div>
 
                 <div>
@@ -334,12 +383,13 @@ const CreateDealPage = () => {
                     }`}
                     placeholder="25000"
                     min="1000"
+                    max="100000000"
                   />
                   {errors.dealAmount && (
                     <p className="mt-1 text-sm text-red-600">{errors.dealAmount}</p>
                   )}
                   <p className="text-sm text-gray-500 mt-1">
-                    This amount will be held in escrow until the transaction is complete (Minimum: ₹1,000)
+                    This amount will be held in escrow until the transaction is complete (Minimum: ₹1,000, Maximum: ₹10 crores)
                   </p>
                 </div>
               </div>
@@ -464,9 +514,18 @@ const CreateDealPage = () => {
                     value={formData.additionalTerms}
                     onChange={handleInputChange}
                     rows={4}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                      errors.additionalTerms ? 'border-red-300' : 'border-gray-300'
+                    }`}
                     placeholder="Any specific terms or conditions for this transaction..."
+                    maxLength={1000}
                   />
+                  {errors.additionalTerms && (
+                    <p className="mt-1 text-sm text-red-600">{errors.additionalTerms}</p>
+                  )}
+                  <p className="mt-1 text-sm text-gray-500">
+                    {formData.additionalTerms.length}/1000 characters
+                  </p>
                 </div>
 
                 <div className="bg-blue-50 p-4 rounded-lg">
