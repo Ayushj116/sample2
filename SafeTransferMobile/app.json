@@ -4,16 +4,12 @@
     "slug": "safe-transfer-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#2563eb"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.safetransfer.mobile",
@@ -56,9 +52,7 @@
         {
           "icon": "./assets/notification-icon.png",
           "color": "#2563eb",
-          "sounds": [
-            "./assets/notification.wav"
-          ]
+          "sounds": ["./assets/notification.wav"]
         }
       ],
       [
