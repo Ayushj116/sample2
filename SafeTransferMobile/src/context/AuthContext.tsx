@@ -1,17 +1,23 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { authService } from '../services/authService';
-import { notificationService } from '../services/notificationService';
-import { STORAGE_KEYS } from '../constants';
-import { User } from '../types';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { authService } from "../services/authService";
+import { notificationService } from "../services/notificationService";
+import { STORAGE_KEYS } from "../constants";
+import { User } from "../types";
 
 interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   user: User | null;
   hasCompletedOnboarding: boolean;
-  login: (phone: string, password: string) => Promise<void>;
-  register: (userData: any) => Promise<void>;
+  login: (phone: string, password: string) => Promise<any>;
+  register: (userData: any) => Promise<any>;
   logout: () => Promise<void>;
   updateUser: (user: User) => Promise<void>;
   completeOnboarding: () => Promise<void>;
@@ -23,7 +29,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
@@ -41,32 +47,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const checkAuthStatus = async () => {
     try {
       setIsLoading(true);
-      
+
       // Check onboarding status
-      const onboardingCompleted = await AsyncStorage.getItem(STORAGE_KEYS.ONBOARDING_COMPLETED);
-      setHasCompletedOnboarding(onboardingCompleted === 'true');
-      
+      const onboardingCompleted = await AsyncStorage.getItem(
+        STORAGE_KEYS.ONBOARDING_COMPLETED,
+      );
+      setHasCompletedOnboarding(onboardingCompleted === "true");
+
       // Check authentication
       const token = await authService.getToken();
       const userData = await authService.getCurrentUser();
-      
+
       if (token && userData) {
         setIsAuthenticated(true);
         setUser(userData);
-        
+
         // Initialize notification service
         try {
           await notificationService.initialize();
           notificationService.connect(userData.id);
         } catch (error) {
-          console.warn('Failed to initialize notifications:', error);
+          console.warn("Failed to initialize notifications:", error);
         }
       } else {
         setIsAuthenticated(false);
         setUser(null);
       }
     } catch (error) {
-      console.error('Auth check error:', error);
+      console.error("Auth check error:", error);
       setIsAuthenticated(false);
       setUser(null);
     } finally {
@@ -84,15 +92,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success) {
         setIsAuthenticated(true);
         setUser(response.data.user);
-        
+
         // Initialize notification service
         try {
           await notificationService.initialize();
           notificationService.connect(response.data.user.id);
         } catch (error) {
-          console.warn('Failed to initialize notifications:', error);
+          console.warn("Failed to initialize notifications:", error);
         }
-        
+
         return response;
       }
       throw new Error(response.message);
@@ -107,15 +115,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success) {
         setIsAuthenticated(true);
         setUser(response.data.user);
-        
+
         // Initialize notification service
         try {
           await notificationService.initialize();
           notificationService.connect(response.data.user.id);
         } catch (error) {
-          console.warn('Failed to initialize notifications:', error);
+          console.warn("Failed to initialize notifications:", error);
         }
-        
+
         return response;
       }
       throw new Error(response.message);
@@ -131,7 +139,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setIsAuthenticated(false);
       setUser(null);
     } catch (error) {
-      console.error('Logout error:', error);
+      console.error("Logout error:", error);
     }
   };
 
@@ -140,16 +148,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await authService.updateUser(updatedUser);
       setUser(updatedUser);
     } catch (error) {
-      console.error('Update user error:', error);
+      console.error("Update user error:", error);
     }
   };
 
   const completeOnboarding = async () => {
     try {
-      await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, 'true');
+      await AsyncStorage.setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, "true");
       setHasCompletedOnboarding(true);
     } catch (error) {
-      console.error('Complete onboarding error:', error);
+      console.error("Complete onboarding error:", error);
     }
   };
 
