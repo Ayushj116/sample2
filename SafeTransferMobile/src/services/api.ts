@@ -1,25 +1,32 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL, STORAGE_KEYS } from '@/constants';
-import { ApiResponse } from '@/types';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_BASE_URL, STORAGE_KEYS } from "@/constants";
+import { ApiResponse } from "@/types";
 
 class ApiError extends Error {
-  constructor(public status: number, message: string, public data?: any) {
+  constructor(
+    public status: number,
+    message: string,
+    public data?: any,
+  ) {
     super(message);
-    this.name = 'ApiError';
+    this.name = "ApiError";
   }
 }
 
-const apiRequest = async (endpoint: string, options: RequestInit = {}): Promise<any> => {
+const apiRequest = async (
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<any> => {
   const url = `${API_BASE_URL}${endpoint}`;
-  
-  const defaultHeaders = {
-    'Content-Type': 'application/json',
+
+  const defaultHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
   };
 
   // Add authorization header if token exists
   const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
   if (token) {
-    defaultHeaders['Authorization'] = `Bearer ${token}`;
+    defaultHeaders["Authorization"] = `Bearer ${token}`;
   }
 
   const config: RequestInit = {
@@ -35,7 +42,11 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}): Promise<
     const data = await response.json();
 
     if (!response.ok) {
-      throw new ApiError(response.status, data.message || 'An error occurred', data);
+      throw new ApiError(
+        response.status,
+        data.message || "An error occurred",
+        data,
+      );
     }
 
     return data;
@@ -43,46 +54,50 @@ const apiRequest = async (endpoint: string, options: RequestInit = {}): Promise<
     if (error instanceof ApiError) {
       throw error;
     }
-    
+
     // Network or other errors
-    throw new ApiError(0, 'Network error. Please check your connection.');
+    throw new ApiError(0, "Network error. Please check your connection.");
   }
 };
 
 export const api = {
-  get: (endpoint: string, options?: RequestInit) => 
-    apiRequest(endpoint, { ...options, method: 'GET' }),
-  
+  get: (endpoint: string, options?: RequestInit) =>
+    apiRequest(endpoint, { ...options, method: "GET" }),
+
   post: (endpoint: string, data?: any, options?: RequestInit) =>
     apiRequest(endpoint, {
       ...options,
-      method: 'POST',
+      method: "POST",
       body: data ? JSON.stringify(data) : undefined,
     }),
-  
+
   put: (endpoint: string, data?: any, options?: RequestInit) =>
     apiRequest(endpoint, {
       ...options,
-      method: 'PUT',
+      method: "PUT",
       body: data ? JSON.stringify(data) : undefined,
     }),
-  
-  delete: (endpoint: string, options?: RequestInit) =>
-    apiRequest(endpoint, { ...options, method: 'DELETE' }),
 
-  upload: async (endpoint: string, formData: FormData, options?: RequestInit) => {
+  delete: (endpoint: string, options?: RequestInit) =>
+    apiRequest(endpoint, { ...options, method: "DELETE" }),
+
+  upload: async (
+    endpoint: string,
+    formData: FormData,
+    options?: RequestInit,
+  ) => {
     const url = `${API_BASE_URL}${endpoint}`;
-    
+
     const token = await AsyncStorage.getItem(STORAGE_KEYS.TOKEN);
     const headers: Record<string, string> = {};
-    
+
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers["Authorization"] = `Bearer ${token}`;
     }
 
     const config: RequestInit = {
       ...options,
-      method: 'POST',
+      method: "POST",
       headers: {
         ...headers,
         ...options?.headers,
@@ -95,7 +110,11 @@ export const api = {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new ApiError(response.status, data.message || 'Upload failed', data);
+        throw new ApiError(
+          response.status,
+          data.message || "Upload failed",
+          data,
+        );
       }
 
       return data;
@@ -103,9 +122,9 @@ export const api = {
       if (error instanceof ApiError) {
         throw error;
       }
-      throw new ApiError(0, 'Network error during upload.');
+      throw new ApiError(0, "Network error during upload.");
     }
-  }
+  },
 };
 
 export { ApiError };
