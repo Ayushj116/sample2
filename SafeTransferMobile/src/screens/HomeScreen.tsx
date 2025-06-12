@@ -22,7 +22,7 @@ import LoadingSpinner from "@/components/common/LoadingSpinner";
 const { width } = Dimensions.get("window");
 
 const HomeScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
