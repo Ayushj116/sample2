@@ -5,21 +5,21 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 
 // Screens
-import SplashScreen from '@/screens/SplashScreen';
-import OnboardingScreen from '@/screens/OnboardingScreen';
-import AuthScreen from '@/screens/AuthScreen';
-import HomeScreen from '@/screens/HomeScreen';
-import DashboardScreen from '@/screens/DashboardScreen';
-import CreateDealScreen from '@/screens/CreateDealScreen';
-import DealDetailsScreen from '@/screens/DealDetailsScreen';
-import KYCScreen from '@/screens/KYCScreen';
-import ProfileScreen from '@/screens/ProfileScreen';
-import NotificationsScreen from '@/screens/NotificationsScreen';
-import SettingsScreen from '@/screens/SettingsScreen';
-import HelpScreen from '@/screens/HelpScreen';
+import SplashScreen from '../screens/SplashScreen';
+import OnboardingScreen from '../screens/OnboardingScreen';
+import AuthScreen from '../screens/AuthScreen';
+import HomeScreen from '../screens/HomeScreen';
+import DashboardScreen from '../screens/DashboardScreen';
+import CreateDealScreen from '../screens/CreateDealScreen';
+import DealDetailsScreen from '../screens/DealDetailsScreen';
+import KYCScreen from '../screens/KYCScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import HelpScreen from '../screens/HelpScreen';
 
-import { COLORS, SIZES } from '@/constants';
-import { useAuth } from '@/hooks/useAuth';
+import { COLORS, SIZES } from '../constants';
+import { useAuth } from '../context/AuthContext';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -77,10 +77,6 @@ const TabNavigator = () => {
 const AppNavigator = () => {
   const { isLoading, isAuthenticated, hasCompletedOnboarding } = useAuth();
 
-  if (isLoading) {
-    return <SplashScreen />;
-  }
-
   return (
     <NavigationContainer>
       <Stack.Navigator
@@ -103,7 +99,9 @@ const AppNavigator = () => {
           },
         }}
       >
-        {!hasCompletedOnboarding ? (
+        {isLoading ? (
+          <Stack.Screen name="Splash" component={SplashScreen} />
+        ) : !hasCompletedOnboarding ? (
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         ) : !isAuthenticated ? (
           <Stack.Screen name="Auth" component={AuthScreen} />

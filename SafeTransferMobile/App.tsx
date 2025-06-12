@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,12 +7,15 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Font from 'expo-font';
 
 import AppNavigator from './src/navigation/AppNavigator';
+import { AuthProvider } from './src/context/AuthContext';
 import { COLORS } from './src/constants';
 
 // Prevent the splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 export default function App() {
+  const [appIsReady, setAppIsReady] = useState(false);
+
   useEffect(() => {
     async function prepare() {
       try {
@@ -20,10 +23,14 @@ export default function App() {
         await Font.loadAsync({
           // Add custom fonts here if needed
         });
+        
+        // Simulate some loading time
+        await new Promise(resolve => setTimeout(resolve, 2000));
       } catch (e) {
         console.warn(e);
       } finally {
         // Tell the application to render
+        setAppIsReady(true);
         await SplashScreen.hideAsync();
       }
     }
@@ -31,12 +38,18 @@ export default function App() {
     prepare();
   }, []);
 
+  if (!appIsReady) {
+    return null;
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar style="dark" backgroundColor={COLORS.background} />
-        <AppNavigator />
-        <Toast />
+        <AuthProvider>
+          <StatusBar style="dark" backgroundColor={COLORS.background} />
+          <AppNavigator />
+          <Toast />
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
