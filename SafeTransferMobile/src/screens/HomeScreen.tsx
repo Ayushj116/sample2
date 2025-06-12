@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,19 +7,19 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import { COLORS, SIZES, FONTS } from '@/constants';
-import { formatCurrency } from '@/utils';
-import { useAuth } from '@/hooks/useAuth';
-import { dealService } from '@/services/dealService';
-import Card from '@/components/common/Card';
-import Button from '@/components/common/Button';
-import StatusBadge from '@/components/common/StatusBadge';
-import LoadingSpinner from '@/components/common/LoadingSpinner';
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useNavigation } from "@react-navigation/native";
+import { COLORS, SIZES, FONTS } from "@/constants";
+import { formatCurrency } from "@/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { dealService } from "@/services/dealService";
+import Card from "@/components/common/Card";
+import Button from "@/components/common/Button";
+import StatusBadge from "@/components/common/StatusBadge";
+import LoadingSpinner from "@/components/common/LoadingSpinner";
 
-const { width } = Dimensions.get('window');
+const { width } = Dimensions.get("window");
 
 const HomeScreen = () => {
   const navigation = useNavigation();
@@ -46,14 +46,18 @@ const HomeScreen = () => {
 
         // Calculate stats
         const deals = response.data.deals;
-        const activeDeals = deals.filter(d => !['completed', 'cancelled', 'refunded'].includes(d.status)).length;
-        const completedDeals = deals.filter(d => d.status === 'completed').length;
+        const activeDeals = deals.filter(
+          (d) => !["completed", "cancelled", "refunded"].includes(d.status),
+        ).length;
+        const completedDeals = deals.filter(
+          (d) => d.status === "completed",
+        ).length;
         const totalValue = deals.reduce((sum, deal) => sum + deal.amount, 0);
 
         setStats({ activeDeals, completedDeals, totalValue });
       }
     } catch (error) {
-      console.error('Load data error:', error);
+      console.error("Load data error:", error);
     } finally {
       setLoading(false);
     }
@@ -74,9 +78,13 @@ const HomeScreen = () => {
         </View>
         <TouchableOpacity
           style={styles.notificationButton}
-          onPress={() => navigation.navigate('Notifications' as never)}
+          onPress={() => navigation.navigate("Notifications" as never)}
         >
-          <Ionicons name="notifications-outline" size={24} color={COLORS.textPrimary} />
+          <Ionicons
+            name="notifications-outline"
+            size={24}
+            color={COLORS.textPrimary}
+          />
           <View style={styles.notificationBadge} />
         </TouchableOpacity>
       </View>
@@ -89,9 +97,14 @@ const HomeScreen = () => {
       <View style={styles.quickActionsGrid}>
         <TouchableOpacity
           style={styles.quickActionItem}
-          onPress={() => navigation.navigate('Create' as never)}
+          onPress={() => navigation.navigate("Create" as never)}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.primary + '20' }]}>
+          <View
+            style={[
+              styles.quickActionIcon,
+              { backgroundColor: COLORS.primary + "20" },
+            ]}
+          >
             <Ionicons name="add-circle" size={24} color={COLORS.primary} />
           </View>
           <Text style={styles.quickActionText}>New Deal</Text>
@@ -99,9 +112,14 @@ const HomeScreen = () => {
 
         <TouchableOpacity
           style={styles.quickActionItem}
-          onPress={() => navigation.navigate('Dashboard' as never)}
+          onPress={() => navigation.navigate("Dashboard" as never)}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.secondary + '20' }]}>
+          <View
+            style={[
+              styles.quickActionIcon,
+              { backgroundColor: COLORS.secondary + "20" },
+            ]}
+          >
             <Ionicons name="grid" size={24} color={COLORS.secondary} />
           </View>
           <Text style={styles.quickActionText}>My Deals</Text>
@@ -109,9 +127,14 @@ const HomeScreen = () => {
 
         <TouchableOpacity
           style={styles.quickActionItem}
-          onPress={() => navigation.navigate('KYC' as never)}
+          onPress={() => navigation.navigate("KYC" as never)}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.accent + '20' }]}>
+          <View
+            style={[
+              styles.quickActionIcon,
+              { backgroundColor: COLORS.accent + "20" },
+            ]}
+          >
             <Ionicons name="shield-checkmark" size={24} color={COLORS.accent} />
           </View>
           <Text style={styles.quickActionText}>KYC</Text>
@@ -119,9 +142,14 @@ const HomeScreen = () => {
 
         <TouchableOpacity
           style={styles.quickActionItem}
-          onPress={() => navigation.navigate('Help' as never)}
+          onPress={() => navigation.navigate("Help" as never)}
         >
-          <View style={[styles.quickActionIcon, { backgroundColor: COLORS.info + '20' }]}>
+          <View
+            style={[
+              styles.quickActionIcon,
+              { backgroundColor: COLORS.info + "20" },
+            ]}
+          >
             <Ionicons name="help-circle" size={24} color={COLORS.info} />
           </View>
           <Text style={styles.quickActionText}>Help</Text>
@@ -143,7 +171,9 @@ const HomeScreen = () => {
           <Text style={styles.statLabel}>Completed</Text>
         </View>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{formatCurrency(stats.totalValue)}</Text>
+          <Text style={styles.statValue}>
+            {formatCurrency(stats.totalValue)}
+          </Text>
           <Text style={styles.statLabel}>Total Value</Text>
         </View>
       </View>
@@ -154,7 +184,9 @@ const HomeScreen = () => {
     <Card style={styles.recentDealsCard}>
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Recent Deals</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('Dashboard' as never)}>
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Dashboard" as never)}
+        >
           <Text style={styles.viewAllText}>View All</Text>
         </TouchableOpacity>
       </View>
@@ -163,10 +195,12 @@ const HomeScreen = () => {
         <View style={styles.emptyState}>
           <Ionicons name="document-outline" size={48} color={COLORS.gray300} />
           <Text style={styles.emptyStateText}>No deals yet</Text>
-          <Text style={styles.emptyStateSubtext}>Create your first secure transaction</Text>
+          <Text style={styles.emptyStateSubtext}>
+            Create your first secure transaction
+          </Text>
           <Button
             title="Create Deal"
-            onPress={() => navigation.navigate('Create' as never)}
+            onPress={() => navigation.navigate("Create" as never)}
             style={styles.emptyStateButton}
           />
         </View>
@@ -175,7 +209,12 @@ const HomeScreen = () => {
           <TouchableOpacity
             key={deal.id}
             style={styles.dealItem}
-              navigation.navigate("DealDetails" as never, { dealId: deal.id } as never)
+            onPress={() =>
+              navigation.navigate(
+                "DealDetails" as never,
+                { dealId: deal.id } as never,
+              )
+            }
           >
             <View style={styles.dealHeader}>
               <Text style={styles.dealTitle} numberOfLines={1}>
@@ -184,10 +223,10 @@ const HomeScreen = () => {
               <StatusBadge status={deal.status} size="small" />
             </View>
             <View style={styles.dealDetails}>
-              <Text style={styles.dealAmount}>{formatCurrency(deal.amount)}</Text>
-              <Text style={styles.dealRole}>
-                You are the {deal.role}
+              <Text style={styles.dealAmount}>
+                {formatCurrency(deal.amount)}
               </Text>
+              <Text style={styles.dealRole}>You are the {deal.role}</Text>
             </View>
             <Text style={styles.dealAction}>{deal.nextAction}</Text>
           </TouchableOpacity>
@@ -198,9 +237,9 @@ const HomeScreen = () => {
 
   const getGreeting = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Morning';
-    if (hour < 17) return 'Afternoon';
-    return 'Evening';
+    if (hour < 12) return "Morning";
+    if (hour < 17) return "Afternoon";
+    return "Evening";
   };
 
   if (loading) {
@@ -239,9 +278,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SIZES.lg,
   },
   headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   greeting: {
     fontSize: SIZES.body,
@@ -255,11 +294,11 @@ const styles = StyleSheet.create({
     marginTop: SIZES.xs,
   },
   notificationButton: {
-    position: 'relative',
+    position: "relative",
     padding: SIZES.sm,
   },
   notificationBadge: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
     width: 8,
@@ -278,28 +317,28 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.md,
   },
   quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   quickActionItem: {
     width: (width - SIZES.lg * 4) / 2,
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: SIZES.md,
   },
   quickActionIcon: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: SIZES.sm,
   },
   quickActionText: {
     fontSize: SIZES.bodySmall,
     fontFamily: FONTS.medium,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
   },
   statsCard: {
     margin: SIZES.lg,
@@ -307,11 +346,11 @@ const styles = StyleSheet.create({
     marginBottom: SIZES.md,
   },
   statsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
   },
   statItem: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   statValue: {
     fontSize: SIZES.h4,
@@ -323,16 +362,16 @@ const styles = StyleSheet.create({
     fontSize: SIZES.caption,
     fontFamily: FONTS.medium,
     color: COLORS.textSecondary,
-    textAlign: 'center',
+    textAlign: "center",
   },
   recentDealsCard: {
     margin: SIZES.lg,
     marginTop: 0,
   },
   sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SIZES.md,
   },
   viewAllText: {
@@ -341,7 +380,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   emptyState: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: SIZES.xl,
   },
   emptyStateText: {
@@ -366,9 +405,9 @@ const styles = StyleSheet.create({
     borderBottomColor: COLORS.borderLight,
   },
   dealHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SIZES.sm,
   },
   dealTitle: {
@@ -379,9 +418,9 @@ const styles = StyleSheet.create({
     marginRight: SIZES.sm,
   },
   dealDetails: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: SIZES.xs,
   },
   dealAmount: {
