@@ -138,7 +138,10 @@ const DashboardScreen = () => {
             key={deal.id}
             style={styles.dealItem}
             onPress={() =>
-              navigation.navigate("DealDetails" as never, { dealId: deal.id })
+              navigation.navigate(
+                "DealDetails" as never,
+                { dealId: deal.id } as never,
+              )
             }
           >
             <View style={styles.dealHeader}>
