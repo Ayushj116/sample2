@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -11,7 +11,8 @@ import {
   Download,
   MessageSquare,
   Shield,
-  TrendingUp
+  TrendingUp,
+  X
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -26,6 +27,7 @@ const DealDashboardPage = () => {
   
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Show success message if redirected from create deal
   const successMessage = location.state?.message;
@@ -73,6 +75,44 @@ const DealDashboardPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleViewDeal = (dealId: string) => {
+    // Navigate to deal details page
+    navigate(`/deal/${dealId}`);
+  };
+
+  const handleDownloadDeal = (deal: Deal) => {
+    // Generate and download deal summary
+    const dealSummary = `
+Deal Summary
+============
+Deal ID: ${deal.dealId}
+Title: ${deal.title}
+Amount: ₹${deal.amount.toLocaleString()}
+Status: ${deal.status}
+Buyer: ${deal.buyer.fullName}
+Seller: ${deal.seller.fullName}
+Created: ${new Date(deal.createdAt).toLocaleDateString()}
+Progress: ${deal.progress}%
+
+Next Action: ${deal.nextAction}
+    `;
+
+    const blob = new Blob([dealSummary], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `deal-${deal.dealId}-summary.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleMessageDeal = (dealId: string) => {
+    // Navigate to deal details with message tab active
+    navigate(`/deal/${dealId}?tab=messages`);
   };
 
   const getStatusColor = (status: string) => {
@@ -175,9 +215,17 @@ const DealDashboardPage = () => {
         {/* Success Message */}
         {successMessage && (
           <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
-              <p className="text-green-700">{successMessage}</p>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <p className="text-green-700">{successMessage}</p>
+              </div>
+              <button 
+                onClick={() => window.history.replaceState({}, '', window.location.pathname)}
+                className="text-green-600 hover:text-green-800"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           </div>
         )}
@@ -204,7 +252,12 @@ const DealDashboardPage = () => {
         {/* Error Message */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-            <p className="text-red-600">{error}</p>
+            <div className="flex items-center justify-between">
+              <p className="text-red-600">{error}</p>
+              <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         )}
 
@@ -350,21 +403,33 @@ const DealDashboardPage = () => {
 
                   {/* Actions */}
                   <div className="flex items-center space-x-3 mt-4 lg:mt-0 lg:ml-6">
-                    <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <button 
+                      onClick={() => handleViewDeal(deal.id)}
+                      className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="View Details"
+                    >
                       <Eye className="w-5 h-5 text-gray-500" />
                     </button>
-                    <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <button 
+                      onClick={() => handleMessageDeal(deal.id)}
+                      className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="Send Message"
+                    >
                       <MessageSquare className="w-5 h-5 text-gray-500" />
                     </button>
-                    <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
+                    <button 
+                      onClick={() => handleDownloadDeal(deal)}
+                      className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                      title="Download Summary"
+                    >
                       <Download className="w-5 h-5 text-gray-500" />
                     </button>
-                    <Link
-                      to={`/deal/${deal.id}`}
+                    <button
+                      onClick={() => handleViewDeal(deal.id)}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors"
                     >
                       View Details
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </div>

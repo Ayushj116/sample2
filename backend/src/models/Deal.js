@@ -308,9 +308,11 @@ dealSchema.methods.getNextAction = function(userId) {
   const userIdStr = userId.toString();
   const buyerIdStr = this.buyer.toString();
   const sellerIdStr = this.seller.toString();
+  const initiatedByStr = this.initiatedBy.toString();
   
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
+  const isInitiator = userIdStr === initiatedByStr;
   
   if (!isBuyer && !isSeller) {
     return 'Not authorized for this deal';
@@ -318,7 +320,7 @@ dealSchema.methods.getNextAction = function(userId) {
   
   switch (this.status) {
     case 'created':
-      if (this.initiatedBy.toString() === userIdStr) {
+      if (isInitiator) {
         return 'Waiting for counterparty to accept';
       } else {
         return 'Accept or reject the deal';
@@ -405,15 +407,17 @@ dealSchema.methods.canUserPerformAction = function(userId, action) {
   const userIdStr = userId.toString();
   const buyerIdStr = this.buyer.toString();
   const sellerIdStr = this.seller.toString();
+  const initiatedByStr = this.initiatedBy.toString();
   
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
+  const isInitiator = userIdStr === initiatedByStr;
   
   if (!isBuyer && !isSeller) return false;
   
   switch (action) {
     case 'accept_deal':
-      return this.status === 'created' && this.initiatedBy.toString() !== userIdStr;
+      return this.status === 'created' && !isInitiator;
     case 'deposit_payment':
       return this.status === 'payment_pending' && isBuyer;
     case 'sign_contract':
