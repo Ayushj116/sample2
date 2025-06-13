@@ -20,6 +20,7 @@ const SignInPage = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,10 +38,14 @@ const SignInPage = () => {
     businessType: '',
     gstin: '',
     agreeToTerms: false,
-    rememberMe: false
+    rememberMe: false,
+    resetToken: '',
+    newPassword: '',
+    confirmNewPassword: ''
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [forgotPasswordStep, setForgotPasswordStep] = useState(1); // 1: phone, 2: otp, 3: new password
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -60,7 +65,24 @@ const SignInPage = () => {
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (activeTab === 'signup') {
+    if (showForgotPassword) {
+      if (forgotPasswordStep === 1) {
+        if (!formData.phone) {
+          newErrors.phone = 'Phone number is required';
+        } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+          newErrors.phone = 'Please enter a valid Indian mobile number';
+        }
+      } else if (forgotPasswordStep === 3) {
+        if (!formData.newPassword) {
+          newErrors.newPassword = 'New password is required';
+        } else if (formData.newPassword.length < 8) {
+          newErrors.newPassword = 'Password must be at least 8 characters';
+        }
+        if (formData.newPassword !== formData.confirmNewPassword) {
+          newErrors.confirmNewPassword = 'Passwords do not match';
+        }
+      }
+    } else if (activeTab === 'signup') {
       if (!formData.firstName.trim()) newErrors.firstName = 'First name is required';
       if (!formData.lastName.trim()) newErrors.lastName = 'Last name is required';
       if (userType === 'business' && !formData.businessName.trim()) {
@@ -72,16 +94,20 @@ const SignInPage = () => {
       }
     }
 
-    if (!formData.phone) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
-      newErrors.phone = 'Please enter a valid Indian mobile number';
+    if (!showForgotPassword || forgotPasswordStep === 1) {
+      if (!formData.phone) {
+        newErrors.phone = 'Phone number is required';
+      } else if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+        newErrors.phone = 'Please enter a valid Indian mobile number';
+      }
     }
 
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+    if (!showForgotPassword) {
+      if (!formData.password) {
+        newErrors.password = 'Password is required';
+      } else if (formData.password.length < 8) {
+        newErrors.password = 'Password must be at least 8 characters';
+      }
     }
 
     setErrors(newErrors);
@@ -97,7 +123,52 @@ const SignInPage = () => {
     setErrors({});
     
     try {
-      if (activeTab === 'signin') {
+      if (showForgotPassword) {
+        if (forgotPasswordStep === 1) {
+          // Send forgot password request
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/forgot-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: formData.phone })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            setForgotPasswordStep(2);
+            // Store reset token for demo (in production, this would be sent via SMS)
+            setFormData(prev => ({ ...prev, resetToken: data.data?.resetToken || '' }));
+          } else {
+            if (data.requiresRegistration) {
+              setErrors({ general: 'Please complete your account registration first' });
+            } else {
+              setErrors({ general: data.message });
+            }
+          }
+        } else if (forgotPasswordStep === 3) {
+          // Reset password
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              token: formData.resetToken, 
+              newPassword: formData.newPassword 
+            })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            setShowForgotPassword(false);
+            setForgotPasswordStep(1);
+            setActiveTab('signin');
+            setFormData(prev => ({ ...prev, password: '', newPassword: '', confirmNewPassword: '', resetToken: '' }));
+            alert('Password reset successfully! Please login with your new password.');
+          } else {
+            setErrors({ general: data.message });
+          }
+        }
+      } else if (activeTab === 'signin') {
         await login(formData.phone, formData.password);
         navigate(from, { replace: true });
       } else {
@@ -127,6 +198,9 @@ const SignInPage = () => {
             validationErrors[err.field] = err.message;
           });
           setErrors(validationErrors);
+        } else if (error.data?.requiresRegistration) {
+          setErrors({ general: 'Please complete your account registration first' });
+          setActiveTab('signup');
         } else {
           setErrors({ general: error.message });
         }
@@ -139,6 +213,167 @@ const SignInPage = () => {
       setIsLoading(false);
     }
   };
+
+  const handleForgotPasswordOTP = () => {
+    // For demo purposes, we'll skip OTP verification
+    // In production, you would verify the OTP here
+    setForgotPasswordStep(3);
+  };
+
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+        <div className="sm:mx-auto sm:w-full sm:max-w-md">
+          <button 
+            onClick={() => {
+              setShowForgotPassword(false);
+              setForgotPasswordStep(1);
+              setErrors({});
+            }}
+            className="inline-flex items-center text-blue-600 hover:text-blue-800 mb-6"
+          >
+            <ArrowLeft className="w-5 h-5 mr-2" />
+            Back to Sign In
+          </button>
+          
+          <div className="flex justify-center">
+            <div className="flex items-center space-x-2">
+              <div className="bg-blue-600 p-2 rounded-lg">
+                <Shield className="w-8 h-8 text-white" />
+              </div>
+              <span className="text-2xl font-bold text-gray-900">Safe Transfer</span>
+            </div>
+          </div>
+          
+          <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
+            {forgotPasswordStep === 1 ? 'Forgot Password' : 
+             forgotPasswordStep === 2 ? 'Verify OTP' : 'Reset Password'}
+          </h2>
+        </div>
+
+        <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+          <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              {forgotPasswordStep === 1 && (
+                <div>
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                    Mobile Number
+                  </label>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      errors.phone ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="9876543210"
+                    maxLength={10}
+                  />
+                  {errors.phone && (
+                    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+                  )}
+                </div>
+              )}
+
+              {forgotPasswordStep === 2 && (
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 mb-4">
+                    We've sent an OTP to your phone number ending in ****{formData.phone.slice(-4)}
+                  </p>
+                  <div className="space-y-4">
+                    <input
+                      type="text"
+                      placeholder="Enter 6-digit OTP"
+                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-center text-lg tracking-widest"
+                      maxLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleForgotPasswordOTP}
+                      className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      Verify OTP
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {forgotPasswordStep === 3 && (
+                <>
+                  <div>
+                    <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700">
+                      New Password
+                    </label>
+                    <input
+                      id="newPassword"
+                      name="newPassword"
+                      type="password"
+                      required
+                      value={formData.newPassword}
+                      onChange={handleInputChange}
+                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.newPassword ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {errors.newPassword && (
+                      <p className="mt-1 text-sm text-red-600">{errors.newPassword}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label htmlFor="confirmNewPassword" className="block text-sm font-medium text-gray-700">
+                      Confirm New Password
+                    </label>
+                    <input
+                      id="confirmNewPassword"
+                      name="confirmNewPassword"
+                      type="password"
+                      required
+                      value={formData.confirmNewPassword}
+                      onChange={handleInputChange}
+                      className={`mt-1 block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                        errors.confirmNewPassword ? 'border-red-300' : 'border-gray-300'
+                      }`}
+                    />
+                    {errors.confirmNewPassword && (
+                      <p className="mt-1 text-sm text-red-600">{errors.confirmNewPassword}</p>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {errors.general && (
+                <div className="bg-red-50 p-3 rounded-lg flex items-center space-x-2">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <p className="text-sm text-red-600">{errors.general}</p>
+                </div>
+              )}
+
+              {(forgotPasswordStep === 1 || forgotPasswordStep === 3) && (
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      <span>Please wait...</span>
+                    </div>
+                  ) : (
+                    forgotPasswordStep === 1 ? 'Send OTP' : 'Reset Password'
+                  )}
+                </button>
+              )}
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
@@ -479,9 +714,13 @@ const SignInPage = () => {
 
               {activeTab === 'signin' && (
                 <div className="text-sm">
-                  <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="font-medium text-blue-600 hover:text-blue-500"
+                  >
                     Forgot password?
-                  </Link>
+                  </button>
                 </div>
               )}
             </div>

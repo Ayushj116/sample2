@@ -121,13 +121,15 @@ export const createDeal = async (req, res) => {
       if (sellerPhone) {
         seller = await User.findOne({ phone: sellerPhone });
         if (!seller) {
+          // Create system-generated user for seller
           seller = new User({
             firstName: sellerName?.split(' ')[0] || 'Seller',
             lastName: sellerName?.split(' ').slice(1).join(' ') || 'User',
             phone: sellerPhone,
-            password: Math.random().toString(36).slice(-8),
+            password: Math.random().toString(36).slice(-8) + 'Temp123!', // Temporary password
             userType: 'personal',
-            phoneVerified: false
+            phoneVerified: false,
+            isSystemGenerated: true // Mark as system-generated
           });
           await seller.save();
         }
@@ -144,13 +146,15 @@ export const createDeal = async (req, res) => {
       if (buyerPhone) {
         buyer = await User.findOne({ phone: buyerPhone });
         if (!buyer) {
+          // Create system-generated user for buyer
           buyer = new User({
             firstName: buyerName?.split(' ')[0] || 'Buyer',
             lastName: buyerName?.split(' ').slice(1).join(' ') || 'User',
             phone: buyerPhone,
-            password: Math.random().toString(36).slice(-8),
+            password: Math.random().toString(36).slice(-8) + 'Temp123!', // Temporary password
             userType: 'personal',
-            phoneVerified: false
+            phoneVerified: false,
+            isSystemGenerated: true // Mark as system-generated
           });
           await buyer.save();
         }
@@ -197,9 +201,13 @@ export const createDeal = async (req, res) => {
     
     try {
       if (counterparty.phone) {
+        const message = counterparty.isSystemGenerated 
+          ? `New escrow deal invitation from ${initiator.fullName} for ₹${amount.toLocaleString()}. Deal ID: ${deal.dealId}. Download Safe Transfer app and create your account to view details.`
+          : `New escrow deal invitation from ${initiator.fullName} for ₹${amount.toLocaleString()}. Deal ID: ${deal.dealId}. Login to Safe Transfer app to view details.`;
+        
         await sendSMS({
           to: counterparty.phone,
-          message: `New escrow deal invitation from ${initiator.fullName} for ₹${amount.toLocaleString()}. Deal ID: ${deal.dealId}. Download Safe Transfer app to view details.`
+          message
         });
       }
     } catch (notificationError) {

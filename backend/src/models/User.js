@@ -146,7 +146,16 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  lockUntil: Date
+  lockUntil: Date,
+  // New fields for system-generated users and password reset
+  isSystemGenerated: {
+    type: Boolean,
+    default: false
+  },
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+  emailVerificationToken: String,
+  emailVerificationExpires: Date
 }, {
   timestamps: true
 });
@@ -155,6 +164,7 @@ const userSchema = new mongoose.Schema({
 userSchema.index({ phone: 1 });
 userSchema.index({ kycStatus: 1 });
 userSchema.index({ userType: 1 });
+userSchema.index({ passwordResetToken: 1 });
 
 // Virtual for full name
 userSchema.virtual('fullName').get(function() {
@@ -209,6 +219,20 @@ userSchema.methods.resetLoginAttempts = function() {
   });
 };
 
+// Method to generate password reset token
+userSchema.methods.createPasswordResetToken = function() {
+  const resetToken = require('crypto').randomBytes(32).toString('hex');
+  
+  this.passwordResetToken = require('crypto')
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  
+  return resetToken;
+};
+
 // Method to get public profile
 userSchema.methods.getPublicProfile = function() {
   return {
@@ -223,7 +247,8 @@ userSchema.methods.getPublicProfile = function() {
     rating: this.rating,
     totalDeals: this.totalDeals,
     completedDeals: this.completedDeals,
-    createdAt: this.createdAt
+    createdAt: this.createdAt,
+    isSystemGenerated: this.isSystemGenerated
   };
 };
 

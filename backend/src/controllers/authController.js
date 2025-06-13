@@ -1,8 +1,10 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
 import { sendSMS } from '../services/smsService.js';
+import { sendEmail } from '../services/emailService.js';
 
 const generateToken = (userId) => {
   return jwt.sign(
@@ -38,21 +40,69 @@ export const register = async (req, res) => {
       gstin
     } = req.body;
 
+    // Check if user already exists
     const existingUser = await User.findOne({ phone });
 
     if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User already exists with this phone number'
-      });
+      // If user is system-generated, update their details
+      if (existingUser.isSystemGenerated) {
+        // Update the system-generated user with provided details
+        existingUser.firstName = firstName;
+        existingUser.lastName = lastName;
+        existingUser.password = password; // This will be hashed by pre-save middleware
+        existingUser.userType = userType;
+        existingUser.isSystemGenerated = false;
+        existingUser.phoneVerified = true;
+        
+        if (userType === 'business') {
+          if (!businessName) {
+            return res.status(400).json({
+              success: false,
+              message: 'Business name is required for business accounts'
+            });
+          }
+          existingUser.businessName = businessName;
+          existingUser.businessType = businessType;
+          existingUser.gstin = gstin;
+        }
+
+        await existingUser.save();
+
+        const token = generateToken(existingUser._id);
+
+        try {
+          await sendSMS({
+            to: phone,
+            message: `Welcome to Safe Transfer! Your account has been activated successfully. Start your secure transactions today.`
+          });
+        } catch (smsError) {
+          console.error('Failed to send welcome SMS:', smsError);
+        }
+
+        return res.status(200).json({
+          success: true,
+          message: 'Account activated successfully',
+          data: {
+            user: existingUser.getPublicProfile(),
+            token
+          }
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'User already exists with this phone number'
+        });
+      }
     }
 
+    // Create new user
     const userData = {
       firstName,
       lastName,
       phone,
       password,
-      userType
+      userType,
+      isSystemGenerated: false
     };
 
     if (userType === 'business') {
@@ -122,6 +172,15 @@ export const login = async (req, res) => {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
+      });
+    }
+
+    // Check if user is system-generated
+    if (user.isSystemGenerated) {
+      return res.status(401).json({
+        success: false,
+        message: 'Please complete your account registration first',
+        requiresRegistration: true
       });
     }
 
@@ -225,11 +284,18 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    const resetToken = jwt.sign(
-      { userId: user._id, purpose: 'password_reset' },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    // Check if user is system-generated
+    if (user.isSystemGenerated) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete your account registration first',
+        requiresRegistration: true
+      });
+    }
+
+    // Generate reset token
+    const resetToken = user.createPasswordResetToken();
+    await user.save({ validateBeforeSave: false });
 
     const otp = generateOTP();
 
@@ -238,6 +304,17 @@ export const forgotPassword = async (req, res) => {
         to: phone,
         message: `Your Safe Transfer password reset OTP is: ${otp}. This OTP will expire in 10 minutes. Do not share this with anyone.`
       });
+
+      // In production, you would store the OTP in database or cache
+      // For demo, we'll return it in response (remove in production)
+      res.json({
+        success: true,
+        message: 'Password reset OTP sent to your phone',
+        data: {
+          resetToken,
+          otp // Remove this in production
+        }
+      });
     } catch (smsError) {
       console.error('Failed to send password reset SMS:', smsError);
       return res.status(500).json({
@@ -245,14 +322,6 @@ export const forgotPassword = async (req, res) => {
         message: 'Failed to send password reset OTP'
       });
     }
-
-    res.json({
-      success: true,
-      message: 'Password reset OTP sent to your phone',
-      data: {
-        resetToken // In production, don't send this. Store it temporarily in database
-      }
-    });
 
   } catch (error) {
     console.error('Forgot password error:', error);
@@ -265,29 +334,12 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { token, otp, newPassword } = req.body;
 
     if (!token || !newPassword) {
       return res.status(400).json({
         success: false,
         message: 'Token and new password are required'
-      });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch (jwtError) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid or expired reset token'
-      });
-    }
-
-    if (decoded.purpose !== 'password_reset') {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid reset token'
       });
     }
 
@@ -298,15 +350,28 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findById(decoded.userId);
+    // Hash the token to compare with stored hash
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(token)
+      .digest('hex');
+
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
     if (!user) {
-      return res.status(404).json({
+      return res.status(400).json({
         success: false,
-        message: 'User not found'
+        message: 'Invalid or expired reset token'
       });
     }
 
+    // Set new password
     user.password = newPassword;
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
     await user.save();
 
     res.json({
@@ -355,6 +420,37 @@ export const refreshToken = async (req, res) => {
 
   } catch (error) {
     console.error('Refresh token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+export const checkUserExists = async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    if (!phone || !/^[6-9]\d{9}$/.test(phone)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid phone number is required'
+      });
+    }
+
+    const user = await User.findOne({ phone });
+
+    res.json({
+      success: true,
+      data: {
+        exists: !!user,
+        isSystemGenerated: user ? user.isSystemGenerated : false,
+        requiresRegistration: user ? user.isSystemGenerated : true
+      }
+    });
+
+  } catch (error) {
+    console.error('Check user exists error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
