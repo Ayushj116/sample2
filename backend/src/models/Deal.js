@@ -3,8 +3,7 @@ import mongoose from 'mongoose';
 const dealSchema = new mongoose.Schema({
   dealId: {
     type: String,
-    unique: true,
-    required: true
+    unique: true
   },
   buyer: {
     type: mongoose.Schema.Types.ObjectId,
@@ -283,7 +282,6 @@ const dealSchema = new mongoose.Schema({
 });
 
 // Indexes
-dealSchema.index({ dealId: 1 });
 dealSchema.index({ buyer: 1 });
 dealSchema.index({ seller: 1 });
 dealSchema.index({ status: 1 });
