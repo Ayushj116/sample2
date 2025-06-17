@@ -17,7 +17,8 @@ import {
   Send,
   Upload,
   X,
-  RefreshCw
+  RefreshCw,
+  Bell
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -37,6 +38,7 @@ const DealDetailsPage = () => {
   const [acceptingDeal, setAcceptingDeal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [hasShownKYCAlert, setHasShownKYCAlert] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -143,6 +145,26 @@ const DealDetailsPage = () => {
     }
   };
 
+  const handleSendKYCReminder = async () => {
+    if (!deal) return;
+
+    try {
+      setSendingReminder(true);
+      setError('');
+      
+      const response = await dealService.sendKYCReminder(deal.id);
+      
+      if (response.success) {
+        alert('KYC reminder sent successfully!');
+        await fetchDeal(true); // Refresh to get new system message
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to send reminder');
+    } finally {
+      setSendingReminder(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -164,6 +186,13 @@ const DealDetailsPage = () => {
 
   const formatStatus = (status: string) => {
     return status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const shouldShowKYCReminder = () => {
+    if (!deal) return false;
+    
+    const nextAction = deal.nextAction;
+    return nextAction.includes('Waiting for') && nextAction.includes('KYC') && nextAction.includes('Send reminder');
   };
 
   if (isLoading) {
@@ -302,9 +331,23 @@ const DealDetailsPage = () => {
               style={{ width: `${deal.progress}%` }}
             ></div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Clock className="w-5 h-5 text-blue-600" />
-            <span className="text-sm font-medium text-gray-700">Next: {deal.nextAction}</span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Clock className="w-5 h-5 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">
+                Next: {deal.nextAction.replace(' - Send reminder', '')}
+              </span>
+            </div>
+            {shouldShowKYCReminder() && (
+              <button
+                onClick={handleSendKYCReminder}
+                disabled={sendingReminder}
+                className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center text-sm"
+              >
+                <Bell className="w-4 h-4 mr-2" />
+                {sendingReminder ? 'Sending...' : 'Send Reminder'}
+              </button>
+            )}
           </div>
         </div>
 
@@ -444,21 +487,29 @@ const DealDetailsPage = () => {
                       <div
                         key={index}
                         className={`flex ${
-                          message.sender._id === user?.id ? 'justify-end' : 'justify-start'
+                          message.isSystemMessage 
+                            ? 'justify-center' 
+                            : message.sender._id === user?.id 
+                              ? 'justify-end' 
+                              : 'justify-start'
                         }`}
                       >
                         <div
                           className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                            message.sender._id === user?.id
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-100 text-gray-900'
+                            message.isSystemMessage
+                              ? 'bg-gray-100 text-gray-700 text-center text-sm'
+                              : message.sender._id === user?.id
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-100 text-gray-900'
                           }`}
                         >
-                          <div className="text-sm font-medium mb-1">
-                            {message.sender._id === user?.id ? 'You' : message.sender.fullName}
-                          </div>
+                          {!message.isSystemMessage && (
+                            <div className="text-sm font-medium mb-1">
+                              {message.sender._id === user?.id ? 'You' : message.sender.fullName}
+                            </div>
+                          )}
                           <div>{message.message}</div>
-                          <div className="text-xs opacity-75 mt-1">
+                          <div className={`text-xs mt-1 ${message.isSystemMessage ? 'text-gray-500' : 'opacity-75'}`}>
                             {new Date(message.timestamp).toLocaleString()}
                           </div>
                         </div>

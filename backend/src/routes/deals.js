@@ -6,7 +6,8 @@ import {
   getDeal,
   acceptDeal,
   addMessage,
-  cancelDeal
+  cancelDeal,
+  sendKYCReminder
 } from '../controllers/dealController.js';
 
 const router = express.Router();
@@ -60,5 +61,6 @@ router.get('/:id', param('id').isMongoId(), getDeal);
 router.post('/:id/accept', param('id').isMongoId(), acceptDeal);
 router.post('/:id/messages', addMessageValidation, addMessage);
 router.post('/:id/cancel', param('id').isMongoId(), cancelDeal);
+router.post('/:id/send-kyc-reminder', param('id').isMongoId(), sendKYCReminder);
 
 export default router;

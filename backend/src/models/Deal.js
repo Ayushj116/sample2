@@ -303,8 +303,8 @@ dealSchema.pre('save', async function(next) {
   next();
 });
 
-// Method to get next action for user
-dealSchema.methods.getNextAction = function(userId) {
+// Method to get next action for user (now async to check KYC status)
+dealSchema.methods.getNextAction = async function(userId) {
   // Convert ObjectIds to strings for comparison
   const userIdStr = userId.toString();
   const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
@@ -319,6 +319,10 @@ dealSchema.methods.getNextAction = function(userId) {
   if (!isBuyer && !isSeller) {
     return 'Not authorized for this deal';
   }
+  
+  // Import User and KYC models dynamically to avoid circular dependency
+  const User = mongoose.model('User');
+  const KYC = mongoose.model('KYC');
   
   switch (this.status) {
     case 'created':
@@ -335,29 +339,61 @@ dealSchema.methods.getNextAction = function(userId) {
       return 'Accept or reject the deal';
       
     case 'accepted':
-      // Check if both parties have completed KYC
-      if (this.workflow.kycVerified.completed) {
-        return 'Proceed to document upload';
-      } else {
-        // Check individual KYC status
-        if (isBuyer && !this.workflow.kycVerified.buyerKyc) {
+      // Check KYC status from database
+      try {
+        const [buyerUser, sellerUser] = await Promise.all([
+          User.findById(buyerIdStr).select('kycStatus'),
+          User.findById(sellerIdStr).select('kycStatus')
+        ]);
+        
+        const buyerKycApproved = buyerUser?.kycStatus === 'approved';
+        const sellerKycApproved = sellerUser?.kycStatus === 'approved';
+        
+        if (buyerKycApproved && sellerKycApproved) {
+          // Both parties have completed KYC, move to next step
+          return 'Proceed to document upload';
+        } else {
+          // Check individual KYC status
+          if (isBuyer && !buyerKycApproved) {
+            return 'Complete KYC verification';
+          } else if (isSeller && !sellerKycApproved) {
+            return 'Complete KYC verification';
+          } else if (isBuyer && buyerKycApproved && !sellerKycApproved) {
+            return 'Waiting for seller KYC - Send reminder';
+          } else if (isSeller && sellerKycApproved && !buyerKycApproved) {
+            return 'Waiting for buyer KYC - Send reminder';
+          }
           return 'Complete KYC verification';
-        } else if (isSeller && !this.workflow.kycVerified.sellerKyc) {
-          return 'Complete KYC verification';
-        } else if (isBuyer && this.workflow.kycVerified.buyerKyc) {
-          return 'Waiting for seller KYC';
-        } else if (isSeller && this.workflow.kycVerified.sellerKyc) {
-          return 'Waiting for buyer KYC';
         }
+      } catch (error) {
+        console.error('Error checking KYC status:', error);
         return 'Complete KYC verification';
       }
       
     case 'kyc_pending':
-      if ((isBuyer && !this.workflow.kycVerified.buyerKyc) || 
-          (isSeller && !this.workflow.kycVerified.sellerKyc)) {
+      try {
+        const [buyerUser, sellerUser] = await Promise.all([
+          User.findById(buyerIdStr).select('kycStatus'),
+          User.findById(sellerIdStr).select('kycStatus')
+        ]);
+        
+        const buyerKycApproved = buyerUser?.kycStatus === 'approved';
+        const sellerKycApproved = sellerUser?.kycStatus === 'approved';
+        
+        if (isBuyer && !buyerKycApproved) {
+          return 'Complete KYC verification';
+        } else if (isSeller && !sellerKycApproved) {
+          return 'Complete KYC verification';
+        } else if (isBuyer && buyerKycApproved && !sellerKycApproved) {
+          return 'Waiting for seller KYC - Send reminder';
+        } else if (isSeller && sellerKycApproved && !buyerKycApproved) {
+          return 'Waiting for buyer KYC - Send reminder';
+        } else {
+          return 'Waiting for counterparty KYC';
+        }
+      } catch (error) {
+        console.error('Error checking KYC status:', error);
         return 'Complete KYC verification';
-      } else {
-        return 'Waiting for counterparty KYC';
       }
       
     case 'documents_pending':

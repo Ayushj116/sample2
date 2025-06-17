@@ -1,6 +1,7 @@
 import { body, validationResult, param } from 'express-validator';
 import Deal from '../models/Deal.js';
 import User from '../models/User.js';
+import KYC from '../models/KYC.js';
 import { sendSMS } from '../services/smsService.js';
 import { calculateEscrowFee } from '../utils/feeCalculator.js';
 
@@ -226,7 +227,7 @@ export const createDeal = async (req, res) => {
           status: deal.status,
           buyer: deal.buyer.getPublicProfile(),
           seller: deal.seller.getPublicProfile(),
-          nextAction: deal.getNextAction(req.user.userId),
+          nextAction: await deal.getNextAction(req.user.userId),
           progress: deal.getProgress(),
           createdAt: deal.createdAt
         }
@@ -291,15 +292,15 @@ export const getDeals = async (req, res) => {
     }
 
     const deals = await Deal.find(query)
-      .populate('buyer', 'firstName lastName fullName avatar userType rating')
-      .populate('seller', 'firstName lastName fullName avatar userType rating')
+      .populate('buyer', 'firstName lastName fullName avatar userType rating kycStatus')
+      .populate('seller', 'firstName lastName fullName avatar userType rating kycStatus')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
     const total = await Deal.countDocuments(query);
 
-    const dealsWithActions = deals.map(deal => ({
+    const dealsWithActions = await Promise.all(deals.map(async (deal) => ({
       id: deal._id,
       dealId: deal.dealId,
       title: deal.title,
@@ -310,11 +311,11 @@ export const getDeals = async (req, res) => {
       buyer: deal.buyer.getPublicProfile(),
       seller: deal.seller.getPublicProfile(),
       role: deal.buyer._id.toString() === req.user.userId ? 'buyer' : 'seller',
-      nextAction: deal.getNextAction(req.user.userId),
+      nextAction: await deal.getNextAction(req.user.userId),
       progress: deal.getProgress(),
       createdAt: deal.createdAt,
       updatedAt: deal.updatedAt
-    }));
+    })));
 
     res.json({
       success: true,
@@ -349,8 +350,8 @@ export const getDeal = async (req, res) => {
     }
 
     const deal = await Deal.findById(req.params.id)
-      .populate('buyer', 'firstName lastName fullName avatar userType rating totalDeals completedDeals')
-      .populate('seller', 'firstName lastName fullName avatar userType rating totalDeals completedDeals')
+      .populate('buyer', 'firstName lastName fullName avatar userType rating totalDeals completedDeals kycStatus')
+      .populate('seller', 'firstName lastName fullName avatar userType rating totalDeals completedDeals kycStatus')
       .populate('initiatedBy', 'firstName lastName fullName')
       .populate('messages.sender', 'firstName lastName fullName avatar')
       .populate('documents.uploadedBy', 'firstName lastName fullName')
@@ -401,7 +402,7 @@ export const getDeal = async (req, res) => {
           messages: deal.messages,
           documents: deal.documents,
           dispute: deal.dispute,
-          nextAction: deal.getNextAction(req.user.userId),
+          nextAction: await deal.getNextAction(req.user.userId),
           progress: deal.getProgress(),
           canPerformActions: {
             acceptDeal: deal.canUserPerformAction(req.user.userId, 'accept_deal'),
@@ -516,7 +517,7 @@ export const acceptDeal = async (req, res) => {
           dealId: deal.dealId,
           status: deal.status,
           workflow: deal.workflow,
-          nextAction: deal.getNextAction(req.user.userId),
+          nextAction: await deal.getNextAction(req.user.userId),
           progress: deal.getProgress(),
           canPerformActions: {
             acceptDeal: deal.canUserPerformAction(req.user.userId, 'accept_deal'),
@@ -657,6 +658,78 @@ export const cancelDeal = async (req, res) => {
 
   } catch (error) {
     console.error('Cancel deal error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+export const sendKYCReminder = async (req, res) => {
+  try {
+    const deal = await Deal.findById(req.params.id)
+      .populate('buyer seller', 'firstName lastName fullName phone kycStatus');
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Deal not found'
+      });
+    }
+
+    const userIdStr = req.user.userId;
+    const buyerIdStr = deal.buyer._id.toString();
+    const sellerIdStr = deal.seller._id.toString();
+
+    if (userIdStr !== buyerIdStr && userIdStr !== sellerIdStr) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to send reminders for this deal'
+      });
+    }
+
+    const isBuyer = userIdStr === buyerIdStr;
+    const counterparty = isBuyer ? deal.seller : deal.buyer;
+    const user = await User.findById(req.user.userId);
+
+    // Check if counterparty needs KYC
+    if (counterparty.kycStatus === 'approved') {
+      return res.status(400).json({
+        success: false,
+        message: 'Counterparty has already completed KYC verification'
+      });
+    }
+
+    try {
+      await sendSMS({
+        to: counterparty.phone,
+        message: `Reminder: ${user.fullName} is waiting for you to complete KYC verification for deal ${deal.dealId}. Please complete your KYC to proceed with the transaction.`
+      });
+
+      // Add system message to deal
+      deal.messages.push({
+        sender: req.user.userId,
+        message: `KYC reminder sent to ${counterparty.fullName}`,
+        isSystemMessage: true
+      });
+
+      await deal.save();
+
+      res.json({
+        success: true,
+        message: 'KYC reminder sent successfully'
+      });
+
+    } catch (smsError) {
+      console.error('Failed to send KYC reminder:', smsError);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to send reminder'
+      });
+    }
+
+  } catch (error) {
+    console.error('Send KYC reminder error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

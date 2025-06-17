@@ -138,5 +138,9 @@ export const dealService = {
 
   async cancelDeal(id: string, reason?: string): Promise<{ success: boolean; message: string }> {
     return api.post(`/deals/${id}/cancel`, { reason });
+  },
+
+  async sendKYCReminder(id: string): Promise<{ success: boolean; message: string }> {
+    return api.post(`/deals/${id}/send-kyc-reminder`);
   }
 };
