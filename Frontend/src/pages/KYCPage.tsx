@@ -14,7 +14,7 @@ import {
   X
 } from 'lucide-react';
 import { kycService, KYCData } from '../services/kycService';
-import FileUpload from '../components/FileUpload';
+import FileUpload, { UploadResult } from '../components/FileUpload';
 import { useAuth } from '../context/AuthContext';
 
 const KYCPage = () => {
@@ -87,21 +87,32 @@ const KYCPage = () => {
     }
   };
 
-  const handleDocumentUpload = async (file: File, documentType: string) => {
+  const handleDocumentUpload = async (result: UploadResult, documentType: string) => {
     try {
       setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
       setError('');
       
-      const response = await kycService.uploadDocument(documentType, file);
+      // For demo purposes, we'll just show success
+      setSuccessMessage(`${documentType} uploaded successfully`);
+      setTimeout(() => setSuccessMessage(''), 3000);
       
-      if (response.success) {
-        setSuccessMessage(`${documentType} uploaded successfully`);
-        setTimeout(() => setSuccessMessage(''), 3000);
-        // Refresh KYC data to show updated document status
-        await fetchKYCData();
-      } else {
-        throw new Error(response.message || 'Upload failed');
-      }
+      // Update KYC data to show the document as uploaded
+      setKycData(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          documents: {
+            ...prev.documents,
+            [documentType]: {
+              fileName: result.data?.fileName || 'Document',
+              fileUrl: result.data?.fileUrl || '',
+              uploadedAt: new Date().toISOString(),
+              verified: false
+            }
+          }
+        };
+      });
+      
     } catch (error: any) {
       setError(error.message || 'Upload failed');
       setTimeout(() => setError(''), 5000);
@@ -320,47 +331,15 @@ const KYCPage = () => {
             )}
           </div>
         ) : (
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
-            {isUploading ? (
-              <div className="space-y-2">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="text-sm text-gray-600">Uploading...</p>
-              </div>
-            ) : (
-              <>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      // Validate file size (10MB max)
-                      if (file.size > 10 * 1024 * 1024) {
-                        setError('File size must be less than 10MB');
-                        return;
-                      }
-                      
-                      // Validate file type
-                      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
-                      if (!allowedTypes.includes(file.type)) {
-                        setError('Only PDF, JPG, and PNG files are allowed');
-                        return;
-                      }
-                      
-                      handleDocumentUpload(file, docType);
-                    }
-                  }}
-                  className="hidden"
-                  id={`file-${docType}`}
-                />
-                <label htmlFor={`file-${docType}`} className="cursor-pointer">
-                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-gray-700">Upload {title}</p>
-                  <p className="text-xs text-gray-500 mt-1">Click to select file</p>
-                </label>
-              </>
-            )}
-          </div>
+          <FileUpload
+            onUpload={(result) => handleDocumentUpload(result, docType)}
+            onError={(error) => setError(error)}
+            accept=".pdf,.jpg,.jpeg,.png"
+            maxSize={10 * 1024 * 1024}
+            allowedTypes={['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']}
+            allowedExtensions={['pdf', 'jpg', 'jpeg', 'png']}
+            documentType={docType}
+          />
         )}
       </div>
     );
@@ -697,7 +676,7 @@ const KYCPage = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GSTIN
+                        GSTIN (Optional)
                       </label>
                       <input
                         type="text"

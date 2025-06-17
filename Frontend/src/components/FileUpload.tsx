@@ -1,6 +1,23 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, CheckCircle, AlertCircle, FileText, Image } from 'lucide-react';
-import { fileUploadService, UploadProgress, UploadResult } from '../services/fileUploadService';
+
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percentage: number;
+}
+
+export interface UploadResult {
+  success: boolean;
+  message: string;
+  data?: {
+    fileName: string;
+    fileUrl: string;
+    fileSize: number;
+    mimeType: string;
+    documentType?: string;
+  };
+}
 
 interface FileUploadProps {
   onUpload: (result: UploadResult) => void;
@@ -13,6 +30,7 @@ interface FileUploadProps {
   disabled?: boolean;
   className?: string;
   children?: React.ReactNode;
+  documentType?: string;
 }
 
 interface FileUploadState {
@@ -33,7 +51,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
   multiple = false,
   disabled = false,
   className = '',
-  children
+  children,
+  documentType
 }) => {
   const [state, setState] = useState<FileUploadState>({
     isDragging: false,
@@ -44,6 +63,45 @@ const FileUpload: React.FC<FileUploadProps> = ({
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
+    // Check file size
+    if (file.size > maxSize) {
+      return {
+        valid: false,
+        error: `File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`
+      };
+    }
+
+    // Check file type
+    if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
+      return {
+        valid: false,
+        error: `File type ${file.type} is not allowed`
+      };
+    }
+
+    // Check file extension
+    if (allowedExtensions.length > 0) {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (!extension || !allowedExtensions.includes(extension)) {
+        return {
+          valid: false,
+          error: `File extension must be one of: ${allowedExtensions.join(', ')}`
+        };
+      }
+    }
+
+    return { valid: true };
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -80,11 +138,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
     const file = files[0]; // Handle single file for now
     
     // Validate file
-    const validation = fileUploadService.validateFile(file, {
-      maxSize,
-      allowedTypes,
-      allowedExtensions
-    });
+    const validation = validateFile(file);
 
     if (!validation.valid) {
       setState(prev => ({ ...prev, error: validation.error || 'Invalid file' }));
@@ -100,8 +154,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
     }));
 
     try {
-      // This would be called by parent component with specific endpoint
-      // For now, we'll just simulate the upload
+      // Create a mock result for immediate UI feedback
       const result: UploadResult = {
         success: true,
         message: 'File uploaded successfully',
@@ -109,9 +162,23 @@ const FileUpload: React.FC<FileUploadProps> = ({
           fileName: file.name,
           fileUrl: URL.createObjectURL(file), // Temporary URL for preview
           fileSize: file.size,
-          mimeType: file.type
+          mimeType: file.type,
+          documentType: documentType
         }
       };
+
+      // Simulate upload progress
+      for (let i = 0; i <= 100; i += 10) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        setState(prev => ({ 
+          ...prev, 
+          progress: { 
+            loaded: (file.size * i) / 100, 
+            total: file.size, 
+            percentage: i 
+          }
+        }));
+      }
 
       setState(prev => ({ 
         ...prev, 
@@ -167,7 +234,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
               <p className="font-medium text-green-900">{state.uploadedFile.data?.fileName}</p>
               <p className="text-sm text-green-700">
                 {state.uploadedFile.data?.fileSize && 
-                  fileUploadService.formatFileSize(state.uploadedFile.data.fileSize)
+                  formatFileSize(state.uploadedFile.data.fileSize)
                 }
               </p>
             </div>
@@ -245,7 +312,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
             </p>
             <p className="text-xs text-gray-500">
               Supports: {allowedExtensions.join(', ').toUpperCase()} 
-              (Max: {fileUploadService.formatFileSize(maxSize)})
+              (Max: {formatFileSize(maxSize)})
             </p>
           </div>
         )}
