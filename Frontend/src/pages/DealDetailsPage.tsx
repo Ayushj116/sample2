@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -56,6 +56,16 @@ const DealDetailsPage = () => {
       
       if (response.success) {
         setDeal(response.data.deal);
+        
+        // Check if KYC is required and redirect
+        if (response.data.deal.status === 'accepted' && user?.kycStatus !== 'approved') {
+          // Show KYC requirement message
+          setTimeout(() => {
+            if (window.confirm('KYC verification is required to proceed with this deal. Would you like to complete it now?')) {
+              navigate('/kyc');
+            }
+          }, 1000);
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to load deal details');
@@ -251,6 +261,27 @@ const DealDetailsPage = () => {
               <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* KYC Warning */}
+        {deal.status === 'accepted' && user?.kycStatus !== 'approved' && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
+                <div>
+                  <h3 className="font-semibold text-yellow-900">KYC Verification Required</h3>
+                  <p className="text-yellow-800">You need to complete KYC verification to proceed with this deal.</p>
+                </div>
+              </div>
+              <Link
+                to="/kyc"
+                className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+              >
+                Complete KYC
+              </Link>
             </div>
           </div>
         )}

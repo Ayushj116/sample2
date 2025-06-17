@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   CheckCircle, 
@@ -10,7 +10,8 @@ import {
   User,
   Building,
   Save,
-  Upload
+  Upload,
+  X
 } from 'lucide-react';
 import { kycService, KYCData } from '../services/kycService';
 import { fileUploadService, UploadResult } from '../services/fileUploadService';
@@ -25,8 +26,10 @@ const KYCPage = () => {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [uploadingDocs, setUploadingDocs] = useState<Record<string, boolean>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [personalInfo, setPersonalInfo] = useState({
     panNumber: '',
@@ -111,27 +114,103 @@ const KYCPage = () => {
     }
   };
 
+  const validatePersonalInfo = () => {
+    const errors: Record<string, string> = {};
+    
+    if (personalInfo.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(personalInfo.panNumber)) {
+      errors.panNumber = 'Invalid PAN number format (e.g., ABCDE1234F)';
+    }
+    
+    if (personalInfo.aadhaarNumber && !/^[0-9]{12}$/.test(personalInfo.aadhaarNumber.replace(/\s/g, ''))) {
+      errors.aadhaarNumber = 'Invalid Aadhaar number format (12 digits)';
+    }
+    
+    if (personalInfo.currentAddress.pincode && !/^[1-9][0-9]{5}$/.test(personalInfo.currentAddress.pincode)) {
+      errors.pincode = 'Invalid pincode format';
+    }
+    
+    if (personalInfo.bankAccount.ifscCode && !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(personalInfo.bankAccount.ifscCode)) {
+      errors.ifscCode = 'Invalid IFSC code format';
+    }
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const validateBusinessInfo = () => {
+    const errors: Record<string, string> = {};
+    
+    if (businessInfo.gstin && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(businessInfo.gstin)) {
+      errors.gstin = 'Invalid GSTIN format';
+    }
+    
+    if (businessInfo.businessAddress.pincode && !/^[1-9][0-9]{5}$/.test(businessInfo.businessAddress.pincode)) {
+      errors.businessPincode = 'Invalid pincode format';
+    }
+    
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const savePersonalInfo = async () => {
+    if (!validatePersonalInfo()) {
+      return;
+    }
+
     try {
       setIsSaving(true);
-      await kycService.updatePersonalInfo(personalInfo);
-      setSuccessMessage('Personal information saved successfully');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setError('');
+      setFieldErrors({});
+      
+      const response = await kycService.updatePersonalInfo(personalInfo);
+      
+      if (response.success) {
+        setSuccessMessage('Personal information saved successfully');
+        setTimeout(() => setSuccessMessage(''), 3000);
+        fetchKYCData(); // Refresh data
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to save personal information');
+      if (err.data?.errors) {
+        const errors: Record<string, string> = {};
+        err.data.errors.forEach((error: any) => {
+          errors[error.field] = error.message;
+        });
+        setFieldErrors(errors);
+      } else {
+        setError(err.message || 'Failed to save personal information');
+      }
     } finally {
       setIsSaving(false);
     }
   };
 
   const saveBusinessInfo = async () => {
+    if (!validateBusinessInfo()) {
+      return;
+    }
+
     try {
       setIsSaving(true);
-      await kycService.updateBusinessInfo(businessInfo);
-      setSuccessMessage('Business information saved successfully');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      setError('');
+      setFieldErrors({});
+      
+      const response = await kycService.updateBusinessInfo(businessInfo);
+      
+      if (response.success) {
+        setSuccessMessage('Business information saved successfully');
+        setTimeout(() => setSuccessMessage(''), 3000);
+        fetchKYCData(); // Refresh data
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to save business information');
+      if (err.data?.errors) {
+        const errors: Record<string, string> = {};
+        err.data.errors.forEach((error: any) => {
+          errors[error.field] = error.message;
+        });
+        setFieldErrors(errors);
+      } else {
+        setError(err.message || 'Failed to save business information');
+      }
     } finally {
       setIsSaving(false);
     }
@@ -140,13 +219,23 @@ const KYCPage = () => {
   const submitKYC = async () => {
     try {
       setIsSaving(true);
-      await kycService.submitKYC({
+      setError('');
+      
+      const response = await kycService.submitKYC({
         kycType: activeTab as 'personal' | 'business',
         personalInfo: activeTab === 'personal' ? personalInfo : undefined,
         businessInfo: activeTab === 'business' ? businessInfo : undefined
       });
-      setSuccessMessage('KYC submitted for verification successfully');
-      fetchKYCData();
+      
+      if (response.success) {
+        setSuccessMessage('KYC submitted for verification successfully');
+        fetchKYCData();
+        
+        // Redirect to dashboard after successful submission
+        setTimeout(() => {
+          navigate('/dashboard');
+        }, 2000);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to submit KYC');
     } finally {
@@ -375,11 +464,21 @@ const KYCPage = () => {
                       <input
                         type="text"
                         value={personalInfo.panNumber}
-                        onChange={(e) => setPersonalInfo(prev => ({ ...prev, panNumber: e.target.value.toUpperCase() }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => {
+                          setPersonalInfo(prev => ({ ...prev, panNumber: e.target.value.toUpperCase() }));
+                          if (fieldErrors.panNumber) {
+                            setFieldErrors(prev => ({ ...prev, panNumber: '' }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          fieldErrors.panNumber ? 'border-red-300' : 'border-gray-300'
+                        }`}
                         placeholder="ABCDE1234F"
                         maxLength={10}
                       />
+                      {fieldErrors.panNumber && (
+                        <p className="mt-1 text-sm text-red-600">{fieldErrors.panNumber}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -388,11 +487,21 @@ const KYCPage = () => {
                       <input
                         type="text"
                         value={personalInfo.aadhaarNumber}
-                        onChange={(e) => setPersonalInfo(prev => ({ ...prev, aadhaarNumber: e.target.value.replace(/\D/g, '') }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => {
+                          setPersonalInfo(prev => ({ ...prev, aadhaarNumber: e.target.value.replace(/\D/g, '') }));
+                          if (fieldErrors.aadhaarNumber) {
+                            setFieldErrors(prev => ({ ...prev, aadhaarNumber: '' }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          fieldErrors.aadhaarNumber ? 'border-red-300' : 'border-gray-300'
+                        }`}
                         placeholder="1234 5678 9012"
                         maxLength={12}
                       />
+                      {fieldErrors.aadhaarNumber && (
+                        <p className="mt-1 text-sm text-red-600">{fieldErrors.aadhaarNumber}</p>
+                      )}
                     </div>
                   </div>
                   
@@ -435,13 +544,23 @@ const KYCPage = () => {
                         type="text"
                         placeholder="Pincode"
                         value={personalInfo.currentAddress.pincode}
-                        onChange={(e) => setPersonalInfo(prev => ({ 
-                          ...prev, 
-                          currentAddress: { ...prev.currentAddress, pincode: e.target.value.replace(/\D/g, '') }
-                        }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => {
+                          setPersonalInfo(prev => ({ 
+                            ...prev, 
+                            currentAddress: { ...prev.currentAddress, pincode: e.target.value.replace(/\D/g, '') }
+                          }));
+                          if (fieldErrors.pincode) {
+                            setFieldErrors(prev => ({ ...prev, pincode: '' }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          fieldErrors.pincode ? 'border-red-300' : 'border-gray-300'
+                        }`}
                         maxLength={6}
                       />
+                      {fieldErrors.pincode && (
+                        <p className="mt-1 text-sm text-red-600">{fieldErrors.pincode}</p>
+                      )}
                     </div>
                   </div>
 
@@ -535,11 +654,21 @@ const KYCPage = () => {
                       <input
                         type="text"
                         value={businessInfo.gstin}
-                        onChange={(e) => setBusinessInfo(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => {
+                          setBusinessInfo(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }));
+                          if (fieldErrors.gstin) {
+                            setFieldErrors(prev => ({ ...prev, gstin: '' }));
+                          }
+                        }}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
+                          fieldErrors.gstin ? 'border-red-300' : 'border-gray-300'
+                        }`}
                         placeholder="22AAAAA0000A1Z5"
                         maxLength={15}
                       />
+                      {fieldErrors.gstin && (
+                        <p className="mt-1 text-sm text-red-600">{fieldErrors.gstin}</p>
+                      )}
                     </div>
                   </div>
 
