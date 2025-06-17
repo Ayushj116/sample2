@@ -154,40 +154,87 @@ const FileUpload: React.FC<FileUploadProps> = ({
     }));
 
     try {
-      // Create a mock result for immediate UI feedback
-      const result: UploadResult = {
-        success: true,
-        message: 'File uploaded successfully',
-        data: {
-          fileName: file.name,
-          fileUrl: URL.createObjectURL(file), // Temporary URL for preview
-          fileSize: file.size,
-          mimeType: file.type,
-          documentType: documentType
-        }
-      };
-
-      // Simulate upload progress
-      for (let i = 0; i <= 100; i += 10) {
-        await new Promise(resolve => setTimeout(resolve, 50));
-        setState(prev => ({ 
-          ...prev, 
-          progress: { 
-            loaded: (file.size * i) / 100, 
-            total: file.size, 
-            percentage: i 
-          }
-        }));
+      // Create FormData for actual upload
+      const formData = new FormData();
+      formData.append('document', file);
+      if (documentType) {
+        formData.append('documentType', documentType);
       }
 
-      setState(prev => ({ 
-        ...prev, 
-        isUploading: false, 
-        progress: null, 
-        uploadedFile: result 
-      }));
+      // Get auth token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      // Create XMLHttpRequest for progress tracking
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentage = Math.round((event.loaded / event.total) * 100);
+          setState(prev => ({ 
+            ...prev, 
+            progress: { 
+              loaded: event.loaded, 
+              total: event.total, 
+              percentage 
+            }
+          }));
+        }
+      });
+
+      // Handle completion
+      xhr.addEventListener('load', () => {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          
+          if (xhr.status >= 200 && xhr.status < 300 && response.success) {
+            const result: UploadResult = {
+              success: true,
+              message: response.message || 'File uploaded successfully',
+              data: {
+                fileName: response.data?.fileName || file.name,
+                fileUrl: response.data?.fileUrl || '',
+                fileSize: response.data?.fileSize || file.size,
+                mimeType: response.data?.mimeType || file.type,
+                documentType: documentType
+              }
+            };
+
+            setState(prev => ({ 
+              ...prev, 
+              isUploading: false, 
+              progress: null, 
+              uploadedFile: result 
+            }));
+            
+            onUpload(result);
+          } else {
+            throw new Error(response.message || 'Upload failed');
+          }
+        } catch (parseError) {
+          throw new Error('Invalid response from server');
+        }
+      });
+
+      // Handle errors
+      xhr.addEventListener('error', () => {
+        throw new Error('Network error during upload');
+      });
+
+      xhr.addEventListener('abort', () => {
+        throw new Error('Upload was cancelled');
+      });
+
+      // Set up the request
+      xhr.open('POST', `${import.meta.env.VITE_API_URL}/kyc/upload`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       
-      onUpload(result);
+      // Send the request
+      xhr.send(formData);
+
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       setState(prev => ({ 
@@ -235,7 +282,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
               <p className="text-sm text-green-700">
                 {state.uploadedFile.data?.fileSize && 
                   formatFileSize(state.uploadedFile.data.fileSize)
-                }
+                } - Uploaded successfully
               </p>
             </div>
           </div>
@@ -286,6 +333,9 @@ const FileUpload: React.FC<FileUploadProps> = ({
                 ></div>
               </div>
             )}
+            <p className="text-xs text-gray-500">
+              {state.progress && `${state.progress.percentage}% complete`}
+            </p>
           </div>
         ) : state.error ? (
           <div className="space-y-2">

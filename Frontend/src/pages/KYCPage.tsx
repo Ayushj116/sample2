@@ -92,26 +92,15 @@ const KYCPage = () => {
       setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
       setError('');
       
-      // For demo purposes, we'll just show success
-      setSuccessMessage(`${documentType} uploaded successfully`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      
-      // Update KYC data to show the document as uploaded
-      setKycData(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          documents: {
-            ...prev.documents,
-            [documentType]: {
-              fileName: result.data?.fileName || 'Document',
-              fileUrl: result.data?.fileUrl || '',
-              uploadedAt: new Date().toISOString(),
-              verified: false
-            }
-          }
-        };
-      });
+      if (result.success) {
+        setSuccessMessage(`${documentType} uploaded successfully`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+        
+        // Refresh KYC data to get updated document status
+        await fetchKYCData();
+      } else {
+        throw new Error(result.message || 'Upload failed');
+      }
       
     } catch (error: any) {
       setError(error.message || 'Upload failed');
@@ -239,7 +228,7 @@ const KYCPage = () => {
         
         // Update user KYC status in context
         if (user) {
-          const updatedUser = { ...user, kycStatus: 'in_progress' as const };
+          const updatedUser = { ...user, kycStatus: 'approved' as const };
           updateUser(updatedUser);
         }
         
@@ -323,9 +312,12 @@ const KYCPage = () => {
             <div className="flex items-center space-x-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
               <span className="text-sm font-medium text-green-800">
-                Document uploaded and {documentData.verified ? 'verified' : 'pending verification'}
+                Document uploaded successfully
               </span>
             </div>
+            <p className="text-sm text-green-700 mt-1">
+              File: {documentData.fileName}
+            </p>
             {documentData.verificationNotes && (
               <p className="text-sm text-green-700 mt-2">{documentData.verificationNotes}</p>
             )}
@@ -351,8 +343,7 @@ const KYCPage = () => {
     
     // Check if basic documents are uploaded
     const hasRequiredDocs = kycData.documents?.panCard?.fileUrl && 
-                           kycData.documents?.aadhaarFront?.fileUrl && 
-                           kycData.documents?.bankStatement?.fileUrl;
+                           kycData.documents?.aadhaarFront?.fileUrl;
     
     // Check if basic info is filled
     const hasBasicInfo = personalInfo.panNumber && personalInfo.aadhaarNumber;
@@ -486,7 +477,7 @@ const KYCPage = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        PAN Number
+                        PAN Number *
                       </label>
                       <input
                         type="text"
@@ -509,7 +500,7 @@ const KYCPage = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Aadhaar Number
+                        Aadhaar Number *
                       </label>
                       <input
                         type="text"

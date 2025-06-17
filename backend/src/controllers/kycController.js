@@ -143,6 +143,13 @@ export const uploadDocument = async (req, res) => {
         
         await kyc.save();
 
+        console.log('Document uploaded successfully:', {
+          userId: req.user.userId,
+          documentType,
+          fileName: req.file.originalname,
+          fileSize: req.file.size
+        });
+
         res.json({
           success: true,
           message: 'Document uploaded successfully',
@@ -256,6 +263,13 @@ export const updatePersonalInfo = async (req, res) => {
     );
     
     await kyc.save();
+
+    console.log('Personal info updated:', {
+      userId: req.user.userId,
+      hasPersonalInfo: !!kyc.personalInfo,
+      hasPAN: !!kyc.personalInfo?.panNumber,
+      hasAadhaar: !!kyc.personalInfo?.aadhaarNumber
+    });
 
     res.json({
       success: true,
@@ -387,15 +401,33 @@ export const submitKYC = async (req, res) => {
       });
     }
 
+    console.log('KYC submission check:', {
+      userId: req.user.userId,
+      kycType: kyc.kycType,
+      hasPersonalInfo: !!kyc.personalInfo,
+      panNumber: kyc.personalInfo?.panNumber,
+      aadhaarNumber: kyc.personalInfo?.aadhaarNumber,
+      documents: Object.keys(kyc.documents || {}),
+      panCardDoc: !!kyc.documents?.panCard?.fileUrl,
+      aadhaarFrontDoc: !!kyc.documents?.aadhaarFront?.fileUrl
+    });
+
     // Check if minimum requirements are met
     const hasBasicInfo = kyc.personalInfo?.panNumber && kyc.personalInfo?.aadhaarNumber;
     const hasRequiredDocs = kyc.documents?.panCard?.fileUrl && 
                            kyc.documents?.aadhaarFront?.fileUrl;
 
-    if (!hasBasicInfo || !hasRequiredDocs) {
+    if (!hasBasicInfo) {
       return res.status(400).json({
         success: false,
-        message: 'Please complete basic information and upload required documents before submitting'
+        message: 'Please complete basic information (PAN and Aadhaar numbers) before submitting'
+      });
+    }
+
+    if (!hasRequiredDocs) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please upload required documents (PAN card and Aadhaar front) before submitting'
       });
     }
 
@@ -418,6 +450,8 @@ export const submitKYC = async (req, res) => {
     await User.findByIdAndUpdate(req.user.userId, {
       kycStatus: 'approved'
     });
+
+    console.log('KYC approved successfully for user:', req.user.userId);
 
     res.json({
       success: true,
