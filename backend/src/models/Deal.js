@@ -322,18 +322,36 @@ dealSchema.methods.getNextAction = function(userId) {
   
   switch (this.status) {
     case 'created':
-      if (isInitiator) {
-        return 'Waiting for counterparty to accept';
-      } else {
+      // Check individual acceptance status
+      if (isBuyer && !this.workflow.partiesAccepted.buyerAccepted) {
         return 'Accept or reject the deal';
+      } else if (isSeller && !this.workflow.partiesAccepted.sellerAccepted) {
+        return 'Accept or reject the deal';
+      } else if (isBuyer && this.workflow.partiesAccepted.buyerAccepted) {
+        return 'Waiting for seller to accept';
+      } else if (isSeller && this.workflow.partiesAccepted.sellerAccepted) {
+        return 'Waiting for buyer to accept';
       }
+      return 'Accept or reject the deal';
+      
     case 'accepted':
       // Check if both parties have completed KYC
       if (this.workflow.kycVerified.completed) {
-        return 'Proceed to next step';
+        return 'Proceed to document upload';
       } else {
+        // Check individual KYC status
+        if (isBuyer && !this.workflow.kycVerified.buyerKyc) {
+          return 'Complete KYC verification';
+        } else if (isSeller && !this.workflow.kycVerified.sellerKyc) {
+          return 'Complete KYC verification';
+        } else if (isBuyer && this.workflow.kycVerified.buyerKyc) {
+          return 'Waiting for seller KYC';
+        } else if (isSeller && this.workflow.kycVerified.sellerKyc) {
+          return 'Waiting for buyer KYC';
+        }
         return 'Complete KYC verification';
       }
+      
     case 'kyc_pending':
       if ((isBuyer && !this.workflow.kycVerified.buyerKyc) || 
           (isSeller && !this.workflow.kycVerified.sellerKyc)) {
@@ -341,6 +359,7 @@ dealSchema.methods.getNextAction = function(userId) {
       } else {
         return 'Waiting for counterparty KYC';
       }
+      
     case 'documents_pending':
       if ((isBuyer && !this.workflow.documentsUploaded.buyerDocs) || 
           (isSeller && !this.workflow.documentsUploaded.sellerDocs)) {
@@ -348,12 +367,14 @@ dealSchema.methods.getNextAction = function(userId) {
       } else {
         return 'Waiting for counterparty documents';
       }
+      
     case 'payment_pending':
       if (isBuyer) {
         return 'Deposit payment into escrow';
       } else {
         return 'Waiting for buyer payment';
       }
+      
     case 'contract_pending':
       if ((isBuyer && !this.workflow.contractSigned.buyerSigned) || 
           (isSeller && !this.workflow.contractSigned.sellerSigned)) {
@@ -361,24 +382,28 @@ dealSchema.methods.getNextAction = function(userId) {
       } else {
         return 'Waiting for counterparty signature';
       }
+      
     case 'funds_deposited':
       if (isSeller) {
         return 'Deliver item/service to buyer';
       } else {
         return 'Waiting for seller delivery';
       }
+      
     case 'in_delivery':
       if (isSeller) {
         return 'Mark item as delivered';
       } else {
         return 'Waiting for delivery';
       }
+      
     case 'delivered':
       if (isBuyer) {
         return 'Inspect and confirm receipt';
       } else {
         return 'Waiting for buyer confirmation';
       }
+      
     case 'completed':
       return 'Deal completed successfully';
     case 'disputed':
@@ -414,20 +439,16 @@ dealSchema.methods.canUserPerformAction = function(userId, action) {
   const userIdStr = userId.toString();
   const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
   const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
-  const initiatedByStr = this.initiatedBy._id ? this.initiatedBy._id.toString() : this.initiatedBy.toString();
   
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
-  const isInitiator = userIdStr === initiatedByStr;
   
   if (!isBuyer && !isSeller) return false;
   
   switch (action) {
     case 'accept_deal':
-      // Only non-initiator can accept, and only if deal is in 'created' status
-      // Also check if this specific user hasn't already accepted
+      // Only allow acceptance if deal is in 'created' status and user hasn't already accepted
       if (this.status !== 'created') return false;
-      if (isInitiator) return false;
       
       if (isBuyer && this.workflow.partiesAccepted.buyerAccepted) return false;
       if (isSeller && this.workflow.partiesAccepted.sellerAccepted) return false;
