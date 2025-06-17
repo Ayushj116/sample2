@@ -18,7 +18,9 @@ import {
   Upload,
   X,
   RefreshCw,
-  Bell
+  Bell,
+  Info,
+  ExternalLink
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -60,14 +62,15 @@ const DealDetailsPage = () => {
       if (response.success) {
         setDeal(response.data.deal);
         
-        // Check if KYC is required and redirect (only show once)
+        // Check if seller KYC is required and redirect (only show once)
         if (response.data.deal.status === 'accepted' && 
+            response.data.deal.role === 'seller' &&
             user?.kycStatus !== 'approved' && 
             !hasShownKYCAlert) {
           setHasShownKYCAlert(true);
           // Show KYC requirement message after a delay
           setTimeout(() => {
-            if (window.confirm('KYC verification is required to proceed with this deal. Would you like to complete it now?')) {
+            if (window.confirm('KYC verification is mandatory for sellers to proceed with this deal. Would you like to complete it now?')) {
               navigate('/kyc');
             }
           }, 1000);
@@ -125,7 +128,7 @@ const DealDetailsPage = () => {
         
         // Show success message temporarily
         const successMessage = deal.status === 'created' && response.data?.deal?.status === 'accepted' 
-          ? 'Deal fully accepted by both parties! You can now proceed to KYC verification.'
+          ? 'Deal fully accepted by both parties! Next step: Seller must complete KYC verification.'
           : 'Deal accepted successfully! Waiting for counterparty acceptance.';
         
         // You could show a toast notification here instead of alert
@@ -193,6 +196,62 @@ const DealDetailsPage = () => {
     
     const nextAction = deal.nextAction;
     return nextAction.includes('Waiting for') && nextAction.includes('KYC') && nextAction.includes('Send reminder');
+  };
+
+  const getRequiredDocuments = () => {
+    if (!deal) return [];
+    
+    const documents = {
+      buyer: [],
+      seller: []
+    };
+
+    // Seller always needs ownership/authenticity documents
+    switch (deal.category) {
+      case 'vehicle':
+        documents.seller = [
+          { type: 'ownership', name: 'Vehicle Registration Certificate (RC)', required: true },
+          { type: 'ownership', name: 'Insurance Certificate', required: true },
+          { type: 'ownership', name: 'Pollution Certificate', required: false },
+          { type: 'ownership', name: 'Service Records', required: false }
+        ];
+        break;
+      case 'real_estate':
+        documents.seller = [
+          { type: 'ownership', name: 'Property Title Deed', required: true },
+          { type: 'ownership', name: 'Property Tax Receipt', required: true },
+          { type: 'ownership', name: 'NOC from Society/Builder', required: false },
+          { type: 'ownership', name: 'Encumbrance Certificate', required: true }
+        ];
+        break;
+      case 'domain':
+        documents.seller = [
+          { type: 'ownership', name: 'Domain Ownership Certificate', required: true },
+          { type: 'ownership', name: 'Domain Transfer Authorization', required: true }
+        ];
+        break;
+      case 'freelancing':
+        documents.seller = [
+          { type: 'agreement', name: 'Work Portfolio/Samples', required: true },
+          { type: 'agreement', name: 'Project Specification Document', required: true }
+        ];
+        documents.buyer = [
+          { type: 'agreement', name: 'Project Requirements Document', required: true }
+        ];
+        break;
+      default:
+        documents.seller = [
+          { type: 'ownership', name: 'Proof of Ownership', required: true },
+          { type: 'other', name: 'Item Description/Specification', required: true }
+        ];
+    }
+
+    return documents[deal.role] || [];
+  };
+
+  const shouldShowDocumentUpload = () => {
+    if (!deal) return false;
+    return deal.nextAction.includes('Upload required documents');
   };
 
   if (isLoading) {
@@ -298,22 +357,58 @@ const DealDetailsPage = () => {
           </div>
         )}
 
-        {/* KYC Warning - Only show if deal is accepted and user KYC is not approved */}
-        {deal.status === 'accepted' && user?.kycStatus !== 'approved' && (
-          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        {/* KYC Warning - Only show for sellers */}
+        {deal.status === 'accepted' && deal.role === 'seller' && user?.kycStatus !== 'approved' && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <AlertCircle className="w-5 h-5 text-yellow-600 mr-2" />
+                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
                 <div>
-                  <h3 className="font-semibold text-yellow-900">KYC Verification Required</h3>
-                  <p className="text-yellow-800">You need to complete KYC verification to proceed with this deal.</p>
+                  <h3 className="font-semibold text-red-900">KYC Verification Required (Mandatory for Sellers)</h3>
+                  <p className="text-red-800">As a seller, you must complete KYC verification to proceed with this deal.</p>
                 </div>
               </div>
               <Link
                 to="/kyc"
-                className="bg-yellow-600 text-white px-4 py-2 rounded-lg hover:bg-yellow-700 transition-colors"
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors"
               >
                 Complete KYC
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* Document Upload Requirements */}
+        {shouldShowDocumentUpload() && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start space-x-3">
+              <FileText className="w-6 h-6 text-blue-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900 mb-2">Required Documents for {deal.category.replace('_', ' ')} Transaction</h3>
+                <p className="text-blue-800 mb-3">Please upload the following documents to proceed:</p>
+                <div className="space-y-2">
+                  {getRequiredDocuments().map((doc, index) => (
+                    <div key={index} className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${doc.required ? 'bg-red-500' : 'bg-gray-400'}`}></div>
+                      <span className={`text-sm ${doc.required ? 'font-medium text-blue-900' : 'text-blue-700'}`}>
+                        {doc.name} {doc.required && <span className="text-red-500">*</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 flex items-center space-x-2">
+                  <Info className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-blue-700">
+                    <span className="text-red-500">*</span> Required documents must be uploaded before proceeding
+                  </span>
+                </div>
+              </div>
+              <Link
+                to={`/deal/${deal.id}/documents`}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Upload Documents
               </Link>
             </div>
           </div>
@@ -347,6 +442,49 @@ const DealDetailsPage = () => {
                 <Bell className="w-4 h-4 mr-2" />
                 {sendingReminder ? 'Sending...' : 'Send Reminder'}
               </button>
+            )}
+          </div>
+        </div>
+
+        {/* Next Steps Guide */}
+        <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">What happens next?</h3>
+          <div className="space-y-3">
+            {deal.status === 'accepted' && (
+              <>
+                <div className="flex items-center space-x-3">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-blue-600">1</span>
+                  </div>
+                  <span className="text-sm text-gray-700">
+                    <strong>Seller KYC:</strong> Seller must complete identity verification (mandatory)
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-gray-600">2</span>
+                  </div>
+                  <span className="text-sm text-gray-700">
+                    <strong>Document Upload:</strong> Upload ownership/authenticity documents
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-gray-600">3</span>
+                  </div>
+                  <span className="text-sm text-gray-700">
+                    <strong>Payment Deposit:</strong> Buyer deposits funds into secure escrow
+                  </span>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-6 h-6 bg-gray-100 rounded-full flex items-center justify-center">
+                    <span className="text-xs font-bold text-gray-600">4</span>
+                  </div>
+                  <span className="text-sm text-gray-700">
+                    <strong>Delivery & Confirmation:</strong> Item delivery and buyer confirmation
+                  </span>
+                </div>
+              </>
             )}
           </div>
         </div>

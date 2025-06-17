@@ -303,6 +303,56 @@ dealSchema.pre('save', async function(next) {
   next();
 });
 
+// Method to get required documents based on category and user role
+dealSchema.methods.getRequiredDocuments = function(userRole) {
+  const documents = {
+    buyer: [],
+    seller: []
+  };
+
+  // Seller always needs ownership/authenticity documents
+  switch (this.category) {
+    case 'vehicle':
+      documents.seller = [
+        { type: 'ownership', name: 'Vehicle Registration Certificate (RC)', required: true },
+        { type: 'ownership', name: 'Insurance Certificate', required: true },
+        { type: 'ownership', name: 'Pollution Certificate', required: false },
+        { type: 'ownership', name: 'Service Records', required: false }
+      ];
+      break;
+    case 'real_estate':
+      documents.seller = [
+        { type: 'ownership', name: 'Property Title Deed', required: true },
+        { type: 'ownership', name: 'Property Tax Receipt', required: true },
+        { type: 'ownership', name: 'NOC from Society/Builder', required: false },
+        { type: 'ownership', name: 'Encumbrance Certificate', required: true }
+      ];
+      break;
+    case 'domain':
+      documents.seller = [
+        { type: 'ownership', name: 'Domain Ownership Certificate', required: true },
+        { type: 'ownership', name: 'Domain Transfer Authorization', required: true }
+      ];
+      break;
+    case 'freelancing':
+      documents.seller = [
+        { type: 'agreement', name: 'Work Portfolio/Samples', required: true },
+        { type: 'agreement', name: 'Project Specification Document', required: true }
+      ];
+      documents.buyer = [
+        { type: 'agreement', name: 'Project Requirements Document', required: true }
+      ];
+      break;
+    default:
+      documents.seller = [
+        { type: 'ownership', name: 'Proof of Ownership', required: true },
+        { type: 'other', name: 'Item Description/Specification', required: true }
+      ];
+  }
+
+  return documents[userRole] || [];
+};
+
 // Method to get next action for user (now async to check KYC status)
 dealSchema.methods.getNextAction = async function(userId) {
   // Convert ObjectIds to strings for comparison
@@ -339,7 +389,7 @@ dealSchema.methods.getNextAction = async function(userId) {
       return 'Accept or reject the deal';
       
     case 'accepted':
-      // Check KYC status from database
+      // Check KYC status from database - SELLER MUST COMPLETE KYC
       try {
         const [buyerUser, sellerUser] = await Promise.all([
           User.findById(buyerIdStr).select('kycStatus'),
@@ -349,25 +399,24 @@ dealSchema.methods.getNextAction = async function(userId) {
         const buyerKycApproved = buyerUser?.kycStatus === 'approved';
         const sellerKycApproved = sellerUser?.kycStatus === 'approved';
         
-        if (buyerKycApproved && sellerKycApproved) {
-          // Both parties have completed KYC, move to next step
-          return 'Proceed to document upload';
-        } else {
-          // Check individual KYC status
-          if (isBuyer && !buyerKycApproved) {
-            return 'Complete KYC verification';
-          } else if (isSeller && !sellerKycApproved) {
-            return 'Complete KYC verification';
-          } else if (isBuyer && buyerKycApproved && !sellerKycApproved) {
-            return 'Waiting for seller KYC - Send reminder';
-          } else if (isSeller && sellerKycApproved && !buyerKycApproved) {
-            return 'Waiting for buyer KYC - Send reminder';
+        // SELLER KYC IS MANDATORY
+        if (!sellerKycApproved) {
+          if (isSeller) {
+            return 'Complete KYC verification (Required for sellers)';
+          } else {
+            return 'Waiting for seller KYC verification - Send reminder';
           }
-          return 'Complete KYC verification';
         }
+        
+        // If seller KYC is done, proceed to document upload
+        return this.getDocumentUploadAction(userIdStr);
+        
       } catch (error) {
         console.error('Error checking KYC status:', error);
-        return 'Complete KYC verification';
+        if (isSeller) {
+          return 'Complete KYC verification (Required for sellers)';
+        }
+        return 'Waiting for seller KYC verification';
       }
       
     case 'kyc_pending':
@@ -377,32 +426,27 @@ dealSchema.methods.getNextAction = async function(userId) {
           User.findById(sellerIdStr).select('kycStatus')
         ]);
         
-        const buyerKycApproved = buyerUser?.kycStatus === 'approved';
         const sellerKycApproved = sellerUser?.kycStatus === 'approved';
         
-        if (isBuyer && !buyerKycApproved) {
-          return 'Complete KYC verification';
-        } else if (isSeller && !sellerKycApproved) {
-          return 'Complete KYC verification';
-        } else if (isBuyer && buyerKycApproved && !sellerKycApproved) {
-          return 'Waiting for seller KYC - Send reminder';
-        } else if (isSeller && sellerKycApproved && !buyerKycApproved) {
-          return 'Waiting for buyer KYC - Send reminder';
+        if (!sellerKycApproved) {
+          if (isSeller) {
+            return 'Complete KYC verification (Required for sellers)';
+          } else {
+            return 'Waiting for seller KYC verification - Send reminder';
+          }
         } else {
-          return 'Waiting for counterparty KYC';
+          return this.getDocumentUploadAction(userIdStr);
         }
       } catch (error) {
         console.error('Error checking KYC status:', error);
-        return 'Complete KYC verification';
+        if (isSeller) {
+          return 'Complete KYC verification (Required for sellers)';
+        }
+        return 'Waiting for seller KYC verification';
       }
       
     case 'documents_pending':
-      if ((isBuyer && !this.workflow.documentsUploaded.buyerDocs) || 
-          (isSeller && !this.workflow.documentsUploaded.sellerDocs)) {
-        return 'Upload required documents';
-      } else {
-        return 'Waiting for counterparty documents';
-      }
+      return this.getDocumentUploadAction(userIdStr);
       
     case 'payment_pending':
       if (isBuyer) {
@@ -450,6 +494,39 @@ dealSchema.methods.getNextAction = async function(userId) {
       return 'Funds refunded';
     default:
       return 'Unknown status';
+  }
+};
+
+// Helper method to get document upload action
+dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
+  const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
+  const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  
+  const isBuyer = userIdStr === buyerIdStr;
+  const isSeller = userIdStr === sellerIdStr;
+  
+  const requiredDocs = this.getRequiredDocuments(isBuyer ? 'buyer' : 'seller');
+  const requiredDocNames = requiredDocs.filter(doc => doc.required).map(doc => doc.name);
+  
+  if (requiredDocNames.length === 0) {
+    // No documents required for this role, proceed to payment
+    if (isBuyer) {
+      return 'Proceed to payment deposit';
+    } else {
+      return 'Waiting for buyer to deposit payment';
+    }
+  }
+  
+  // Check if user has uploaded required documents
+  const userDocs = this.documents.filter(doc => doc.uploadedBy.toString() === userIdStr);
+  const uploadedDocTypes = userDocs.map(doc => doc.documentType);
+  
+  if (isSeller && !this.workflow.documentsUploaded.sellerDocs) {
+    return `Upload required documents: ${requiredDocNames.slice(0, 2).join(', ')}${requiredDocNames.length > 2 ? ` and ${requiredDocNames.length - 2} more` : ''}`;
+  } else if (isBuyer && !this.workflow.documentsUploaded.buyerDocs && requiredDocNames.length > 0) {
+    return `Upload required documents: ${requiredDocNames.slice(0, 2).join(', ')}${requiredDocNames.length > 2 ? ` and ${requiredDocNames.length - 2} more` : ''}`;
+  } else {
+    return 'Waiting for counterparty documents';
   }
 };
 
