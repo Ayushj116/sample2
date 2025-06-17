@@ -441,7 +441,7 @@ export const acceptDeal = async (req, res) => {
     if (!deal.canUserPerformAction(req.user.userId, 'accept_deal')) {
       return res.status(403).json({
         success: false,
-        message: 'Not authorized to accept this deal'
+        message: 'Not authorized to accept this deal or deal already accepted'
       });
     }
 
@@ -449,7 +449,17 @@ export const acceptDeal = async (req, res) => {
     const buyerIdStr = deal.buyer._id.toString();
     const sellerIdStr = deal.seller._id.toString();
     const isBuyer = userIdStr === buyerIdStr;
+    const isSeller = userIdStr === sellerIdStr;
 
+    // Ensure user is either buyer or seller
+    if (!isBuyer && !isSeller) {
+      return res.status(403).json({
+        success: false,
+        message: 'Not authorized to accept this deal'
+      });
+    }
+
+    // Update acceptance status
     if (isBuyer) {
       deal.workflow.partiesAccepted.buyerAccepted = true;
       deal.workflow.partiesAccepted.buyerAcceptedAt = new Date();
@@ -458,6 +468,7 @@ export const acceptDeal = async (req, res) => {
       deal.workflow.partiesAccepted.sellerAcceptedAt = new Date();
     }
 
+    // Check if both parties have accepted
     if (deal.workflow.partiesAccepted.buyerAccepted && deal.workflow.partiesAccepted.sellerAccepted) {
       deal.workflow.partiesAccepted.completed = true;
       deal.workflow.partiesAccepted.completedAt = new Date();
@@ -465,6 +476,7 @@ export const acceptDeal = async (req, res) => {
       deal.acceptedAt = new Date();
     }
 
+    // Add system message
     deal.messages.push({
       sender: req.user.userId,
       message: `${isBuyer ? 'Buyer' : 'Seller'} has accepted the deal`,
@@ -473,27 +485,48 @@ export const acceptDeal = async (req, res) => {
 
     await deal.save();
 
+    // Send notification to counterparty
     const counterparty = isBuyer ? deal.seller : deal.buyer;
     const user = await User.findById(req.user.userId);
 
     try {
       if (counterparty.phone) {
+        const message = deal.status === 'accepted' 
+          ? `Deal ${deal.dealId} fully accepted! Both parties have agreed. Next step: Complete KYC verification.`
+          : `Deal ${deal.dealId} accepted by ${user.fullName}. Waiting for ${isBuyer ? 'seller' : 'buyer'} acceptance.`;
+        
         await sendSMS({
           to: counterparty.phone,
-          message: `Deal ${deal.dealId} accepted by ${user.fullName}. Next step: Complete KYC verification.`
+          message
         });
       }
     } catch (notificationError) {
       console.error('Failed to send acceptance notification:', notificationError);
     }
 
+    // Return updated deal data
+    await deal.populate(['buyer', 'seller']);
+
     res.json({
       success: true,
       message: 'Deal accepted successfully',
       data: {
-        status: deal.status,
-        nextAction: deal.getNextAction(req.user.userId),
-        progress: deal.getProgress()
+        deal: {
+          id: deal._id,
+          dealId: deal.dealId,
+          status: deal.status,
+          workflow: deal.workflow,
+          nextAction: deal.getNextAction(req.user.userId),
+          progress: deal.getProgress(),
+          canPerformActions: {
+            acceptDeal: deal.canUserPerformAction(req.user.userId, 'accept_deal'),
+            depositPayment: deal.canUserPerformAction(req.user.userId, 'deposit_payment'),
+            signContract: deal.canUserPerformAction(req.user.userId, 'sign_contract'),
+            markDelivered: deal.canUserPerformAction(req.user.userId, 'mark_delivered'),
+            confirmReceipt: deal.canUserPerformAction(req.user.userId, 'confirm_receipt'),
+            raiseDispute: deal.canUserPerformAction(req.user.userId, 'raise_dispute')
+          }
+        }
       }
     });
 

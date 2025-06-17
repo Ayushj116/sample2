@@ -328,7 +328,12 @@ dealSchema.methods.getNextAction = function(userId) {
         return 'Accept or reject the deal';
       }
     case 'accepted':
-      return 'Complete KYC verification';
+      // Check if both parties have completed KYC
+      if (this.workflow.kycVerified.completed) {
+        return 'Proceed to next step';
+      } else {
+        return 'Complete KYC verification';
+      }
     case 'kyc_pending':
       if ((isBuyer && !this.workflow.kycVerified.buyerKyc) || 
           (isSeller && !this.workflow.kycVerified.sellerKyc)) {
@@ -419,7 +424,16 @@ dealSchema.methods.canUserPerformAction = function(userId, action) {
   
   switch (action) {
     case 'accept_deal':
-      return this.status === 'created' && !isInitiator;
+      // Only non-initiator can accept, and only if deal is in 'created' status
+      // Also check if this specific user hasn't already accepted
+      if (this.status !== 'created') return false;
+      if (isInitiator) return false;
+      
+      if (isBuyer && this.workflow.partiesAccepted.buyerAccepted) return false;
+      if (isSeller && this.workflow.partiesAccepted.sellerAccepted) return false;
+      
+      return true;
+      
     case 'deposit_payment':
       return this.status === 'payment_pending' && isBuyer;
     case 'sign_contract':

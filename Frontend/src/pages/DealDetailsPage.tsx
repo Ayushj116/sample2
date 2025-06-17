@@ -16,7 +16,8 @@ import {
   Download,
   Send,
   Upload,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -34,6 +35,7 @@ const DealDetailsPage = () => {
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
   const [acceptingDeal, setAcceptingDeal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -41,9 +43,13 @@ const DealDetailsPage = () => {
     }
   }, [id]);
 
-  const fetchDeal = async () => {
+  const fetchDeal = async (showRefreshIndicator = false) => {
     try {
-      setIsLoading(true);
+      if (showRefreshIndicator) {
+        setRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       setError('');
       
       const response = await dealService.getDeal(id!);
@@ -55,7 +61,12 @@ const DealDetailsPage = () => {
       setError(err.message || 'Failed to load deal details');
     } finally {
       setIsLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    fetchDeal(true);
   };
 
   const handleSendMessage = async () => {
@@ -65,7 +76,7 @@ const DealDetailsPage = () => {
       setSendingMessage(true);
       await dealService.addMessage(deal.id, newMessage.trim());
       setNewMessage('');
-      await fetchDeal(); // Refresh to get new message
+      await fetchDeal(true); // Refresh to get new message
     } catch (err: any) {
       setError(err.message || 'Failed to send message');
     } finally {
@@ -83,14 +94,33 @@ const DealDetailsPage = () => {
       const response = await dealService.acceptDeal(deal.id);
       
       if (response.success) {
-        // Show success message
-        setError('');
+        // Update the deal state with the new data from the response
+        if (response.data?.deal) {
+          setDeal(prevDeal => ({
+            ...prevDeal!,
+            ...response.data.deal,
+            // Preserve other fields that might not be in the response
+            title: prevDeal!.title,
+            description: prevDeal!.description,
+            buyer: prevDeal!.buyer,
+            seller: prevDeal!.seller,
+          }));
+        }
         
-        // Refresh deal data to get updated status
-        await fetchDeal();
+        // Show success message temporarily
+        const successMessage = deal.status === 'created' && response.data?.deal?.status === 'accepted' 
+          ? 'Deal fully accepted by both parties! You can now proceed to KYC verification.'
+          : 'Deal accepted successfully! Waiting for counterparty acceptance.';
         
-        // Show success notification
-        alert('Deal accepted successfully! You can now proceed to the next step.');
+        // You could show a toast notification here instead of alert
+        setTimeout(() => {
+          alert(successMessage);
+        }, 100);
+        
+        // Refresh the deal data to ensure we have the latest state
+        setTimeout(() => {
+          fetchDeal(true);
+        }, 500);
       }
     } catch (err: any) {
       setError(err.message || 'Failed to accept deal');
@@ -197,7 +227,15 @@ const DealDetailsPage = () => {
                 <span>Created: {new Date(deal.createdAt).toLocaleDateString()}</span>
               </div>
             </div>
-            <div className="mt-4 md:mt-0">
+            <div className="mt-4 md:mt-0 flex items-center space-x-3">
+              <button
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+                title="Refresh"
+              >
+                <RefreshCw className={`w-5 h-5 text-gray-500 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
               <div className={`px-4 py-2 rounded-full text-sm font-medium border ${getStatusColor(deal.status)}`}>
                 {formatStatus(deal.status)}
               </div>
