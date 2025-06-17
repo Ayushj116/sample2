@@ -14,7 +14,6 @@ import {
   X
 } from 'lucide-react';
 import { kycService, KYCData } from '../services/kycService';
-import { fileUploadService, UploadResult } from '../services/fileUploadService';
 import FileUpload from '../components/FileUpload';
 import { useAuth } from '../context/AuthContext';
 
@@ -88,27 +87,24 @@ const KYCPage = () => {
     }
   };
 
-  const handleDocumentUpload = async (documentType: string, result: UploadResult) => {
-    if (result.success) {
-      setSuccessMessage(`${documentType} uploaded successfully`);
-      setTimeout(() => setSuccessMessage(''), 3000);
-      // Refresh KYC data to show updated document status
-      fetchKYCData();
-    }
-  };
-
-  const handleDocumentError = (error: string) => {
-    setError(error);
-    setTimeout(() => setError(''), 5000);
-  };
-
-  const uploadDocument = async (file: File, documentType: string) => {
+  const handleDocumentUpload = async (file: File, documentType: string) => {
     try {
       setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
-      const result = await fileUploadService.uploadKYCDocument(file, documentType);
-      handleDocumentUpload(documentType, result);
+      setError('');
+      
+      const response = await kycService.uploadDocument(documentType, file);
+      
+      if (response.success) {
+        setSuccessMessage(`${documentType} uploaded successfully`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+        // Refresh KYC data to show updated document status
+        await fetchKYCData();
+      } else {
+        throw new Error(response.message || 'Upload failed');
+      }
     } catch (error: any) {
-      handleDocumentError(error.message || 'Upload failed');
+      setError(error.message || 'Upload failed');
+      setTimeout(() => setError(''), 5000);
     } finally {
       setUploadingDocs(prev => ({ ...prev, [documentType]: false }));
     }
@@ -324,28 +320,47 @@ const KYCPage = () => {
             )}
           </div>
         ) : (
-          <FileUpload
-            onUpload={(result) => uploadDocument(result.data as any, docType)}
-            onError={handleDocumentError}
-            accept=".pdf,.jpg,.jpeg,.png"
-            maxSize={10 * 1024 * 1024} // 10MB
-            allowedTypes={['application/pdf', 'image/jpeg', 'image/png']}
-            allowedExtensions={['pdf', 'jpg', 'jpeg', 'png']}
-            disabled={isUploading}
-          >
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
             {isUploading ? (
               <div className="space-y-2">
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                 <p className="text-sm text-gray-600">Uploading...</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                <Upload className="w-8 h-8 text-gray-400 mx-auto" />
-                <p className="text-sm font-medium text-gray-700">Upload {title}</p>
-                <p className="text-xs text-gray-500">Click or drag file here</p>
-              </div>
+              <>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      // Validate file size (10MB max)
+                      if (file.size > 10 * 1024 * 1024) {
+                        setError('File size must be less than 10MB');
+                        return;
+                      }
+                      
+                      // Validate file type
+                      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+                      if (!allowedTypes.includes(file.type)) {
+                        setError('Only PDF, JPG, and PNG files are allowed');
+                        return;
+                      }
+                      
+                      handleDocumentUpload(file, docType);
+                    }
+                  }}
+                  className="hidden"
+                  id={`file-${docType}`}
+                />
+                <label htmlFor={`file-${docType}`} className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-gray-700">Upload {title}</p>
+                  <p className="text-xs text-gray-500 mt-1">Click to select file</p>
+                </label>
+              </>
             )}
-          </FileUpload>
+          </div>
         )}
       </div>
     );
@@ -613,14 +628,14 @@ const KYCPage = () => {
                     title="PAN Card"
                     description="Upload clear image of your PAN card"
                     docType="panCard"
-                    acceptedFormats="PDF, JPG, PNG (Max 5MB)"
+                    acceptedFormats="PDF, JPG, PNG (Max 10MB)"
                   />
 
                   <DocumentUploadSection
                     title="Aadhaar Card"
-                    description="Upload front and back of Aadhaar card"
+                    description="Upload front side of Aadhaar card"
                     docType="aadhaarFront"
-                    acceptedFormats="PDF, JPG, PNG (Max 5MB)"
+                    acceptedFormats="PDF, JPG, PNG (Max 10MB)"
                   />
 
                   <DocumentUploadSection
@@ -634,7 +649,7 @@ const KYCPage = () => {
                     title="Address Proof"
                     description="Utility bill, rent agreement, or passport"
                     docType="addressProof"
-                    acceptedFormats="PDF, JPG, PNG (Max 5MB)"
+                    acceptedFormats="PDF, JPG, PNG (Max 10MB)"
                   />
                 </div>
 
@@ -729,7 +744,7 @@ const KYCPage = () => {
                     description="GST registration certificate"
                     docType="gstCertificate"
                     isRequired={false}
-                    acceptedFormats="PDF, JPG, PNG (Max 5MB)"
+                    acceptedFormats="PDF, JPG, PNG (Max 10MB)"
                   />
                 </div>
 

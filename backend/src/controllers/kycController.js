@@ -1,6 +1,12 @@
 import KYC from '../models/KYC.js';
 import User from '../models/User.js';
 import upload from '../middleware/upload.js';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 export const getKYCStatus = async (req, res) => {
   try {
@@ -31,8 +37,10 @@ export const getKYCStatus = async (req, res) => {
 
 export const uploadDocument = async (req, res) => {
   try {
+    // Use multer middleware
     upload.single('document')(req, res, async (err) => {
       if (err) {
+        console.error('Multer error:', err);
         return res.status(400).json({
           success: false,
           message: err.message
@@ -49,44 +57,121 @@ export const uploadDocument = async (req, res) => {
       const { documentType } = req.body;
       
       if (!documentType) {
+        // Clean up uploaded file if documentType is missing
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file:', cleanupError);
+          }
+        }
+        
         return res.status(400).json({
           success: false,
           message: 'Document type is required'
         });
       }
 
-      let kyc = await KYC.findOne({ user: req.user.userId });
-      
-      if (!kyc) {
-        kyc = new KYC({
-          user: req.user.userId,
-          kycType: 'personal',
-          status: 'pending'
+      // Validate document type
+      const validDocumentTypes = [
+        'panCard', 'aadhaarFront', 'aadhaarBack', 'bankStatement', 
+        'addressProof', 'businessRegistration', 'gstCertificate', 
+        'businessBankStatement', 'authorizedSignatoryId'
+      ];
+
+      if (!validDocumentTypes.includes(documentType)) {
+        // Clean up uploaded file
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file:', cleanupError);
+          }
+        }
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid document type'
         });
       }
 
-      const documentData = {
-        fileName: req.file.originalname,
-        fileUrl: `/uploads/${req.file.filename}`,
-        uploadedAt: new Date(),
-        verified: false
-      };
+      try {
+        let kyc = await KYC.findOne({ user: req.user.userId });
+        
+        if (!kyc) {
+          kyc = new KYC({
+            user: req.user.userId,
+            kycType: 'personal',
+            status: 'pending'
+          });
+        }
 
-      kyc.documents[documentType] = documentData;
-      kyc.status = 'in_progress';
-      
-      await kyc.save();
+        // If there's an existing document, remove the old file
+        if (kyc.documents && kyc.documents[documentType] && kyc.documents[documentType].fileUrl) {
+          const oldFilePath = path.join(__dirname, '../../uploads', path.basename(kyc.documents[documentType].fileUrl));
+          try {
+            if (fs.existsSync(oldFilePath)) {
+              fs.unlinkSync(oldFilePath);
+            }
+          } catch (cleanupError) {
+            console.error('Error removing old file:', cleanupError);
+          }
+        }
 
-      res.json({
-        success: true,
-        message: 'Document uploaded successfully',
-        data: {
+        const documentData = {
           fileName: req.file.originalname,
           fileUrl: `/uploads/${req.file.filename}`,
-          fileSize: req.file.size,
-          mimeType: req.file.mimetype
+          uploadedAt: new Date(),
+          verified: false
+        };
+
+        // Initialize documents object if it doesn't exist
+        if (!kyc.documents) {
+          kyc.documents = {};
         }
-      });
+
+        kyc.documents[documentType] = documentData;
+        kyc.status = 'in_progress';
+        
+        // Add audit entry
+        kyc.addAuditEntry(
+          `Document uploaded: ${documentType}`,
+          req.user.userId,
+          `File: ${req.file.originalname}`,
+          req.ip
+        );
+        
+        await kyc.save();
+
+        res.json({
+          success: true,
+          message: 'Document uploaded successfully',
+          data: {
+            fileName: req.file.originalname,
+            fileUrl: `/uploads/${req.file.filename}`,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            documentType: documentType
+          }
+        });
+
+      } catch (dbError) {
+        console.error('Database error during document upload:', dbError);
+        
+        // Clean up uploaded file on database error
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file after DB error:', cleanupError);
+          }
+        }
+        
+        res.status(500).json({
+          success: false,
+          message: 'Failed to save document information'
+        });
+      }
     });
 
   } catch (error) {
@@ -161,6 +246,14 @@ export const updatePersonalInfo = async (req, res) => {
 
     kyc.status = 'in_progress';
     kyc.markModified('personalInfo'); // Ensure Mongoose detects the change
+    
+    // Add audit entry
+    kyc.addAuditEntry(
+      'Personal information updated',
+      req.user.userId,
+      'Personal info form updated',
+      req.ip
+    );
     
     await kyc.save();
 
@@ -243,6 +336,14 @@ export const updateBusinessInfo = async (req, res) => {
     kyc.kycType = 'business';
     kyc.status = 'in_progress';
     kyc.markModified('businessInfo'); // Ensure Mongoose detects the change
+    
+    // Add audit entry
+    kyc.addAuditEntry(
+      'Business information updated',
+      req.user.userId,
+      'Business info form updated',
+      req.ip
+    );
     
     await kyc.save();
 

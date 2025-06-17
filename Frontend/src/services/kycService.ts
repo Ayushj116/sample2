@@ -74,13 +74,19 @@ export const kycService = {
     formData.append('document', file);
     formData.append('documentType', documentType);
 
+    const token = localStorage.getItem('token');
     const response = await fetch(`${import.meta.env.VITE_API_URL}/kyc/upload`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Authorization': `Bearer ${token}`,
       },
       body: formData,
     });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Upload failed');
+    }
 
     return response.json();
   },

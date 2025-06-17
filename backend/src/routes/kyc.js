@@ -1,4 +1,5 @@
 import express from 'express';
+import { handleMulterError } from '../middleware/upload.js';
 import {
   getKYCStatus,
   uploadDocument,
@@ -8,6 +9,9 @@ import {
 } from '../controllers/kycController.js';
 
 const router = express.Router();
+
+// Apply multer error handling to all routes
+router.use(handleMulterError);
 
 router.get('/status', getKYCStatus);
 router.post('/upload', uploadDocument);
