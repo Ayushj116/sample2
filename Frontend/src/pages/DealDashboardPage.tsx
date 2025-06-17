@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Shield,
   TrendingUp,
-  X
+  X,
+  RefreshCw
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +23,7 @@ const DealDashboardPage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 0 });
   
@@ -36,9 +38,13 @@ const DealDashboardPage = () => {
     fetchDeals();
   }, [activeTab, searchTerm]);
 
-  const fetchDeals = async () => {
+  const fetchDeals = async (showRefreshIndicator = false) => {
     try {
-      setIsLoading(true);
+      if (showRefreshIndicator) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
       setError('');
       
       const params: any = {
@@ -74,7 +80,12 @@ const DealDashboardPage = () => {
       setError(err.message || 'Failed to load deals');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    fetchDeals(true);
   };
 
   const handleViewDeal = (dealId: string) => {
@@ -237,7 +248,15 @@ Next Action: ${deal.nextAction}
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Deal Dashboard</h1>
               <p className="text-gray-600">Monitor and manage all your escrow transactions</p>
             </div>
-            <div className="mt-4 md:mt-0">
+            <div className="mt-4 md:mt-0 flex items-center space-x-3">
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                className="flex items-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+                Refresh
+              </button>
               <Link
                 to="/create-deal"
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors inline-flex items-center"

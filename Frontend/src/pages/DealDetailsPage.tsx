@@ -33,6 +33,7 @@ const DealDetailsPage = () => {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'overview');
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const [acceptingDeal, setAcceptingDeal] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -76,10 +77,25 @@ const DealDetailsPage = () => {
     if (!deal) return;
 
     try {
-      await dealService.acceptDeal(deal.id);
-      await fetchDeal(); // Refresh deal data
+      setAcceptingDeal(true);
+      setError('');
+      
+      const response = await dealService.acceptDeal(deal.id);
+      
+      if (response.success) {
+        // Show success message
+        setError('');
+        
+        // Refresh deal data to get updated status
+        await fetchDeal();
+        
+        // Show success notification
+        alert('Deal accepted successfully! You can now proceed to the next step.');
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to accept deal');
+    } finally {
+      setAcceptingDeal(false);
     }
   };
 
@@ -229,9 +245,17 @@ const DealDetailsPage = () => {
               </div>
               <button
                 onClick={handleAcceptDeal}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+                disabled={acceptingDeal}
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
               >
-                Accept Deal
+                {acceptingDeal ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Accepting...
+                  </>
+                ) : (
+                  'Accept Deal'
+                )}
               </button>
             </div>
           </div>

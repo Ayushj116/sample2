@@ -123,7 +123,13 @@ export const dealService = {
   },
 
   async acceptDeal(id: string): Promise<{ success: boolean; message: string; data: any }> {
-    return api.post(`/deals/${id}/accept`);
+    try {
+      const response = await api.post(`/deals/${id}/accept`);
+      return response;
+    } catch (error) {
+      console.error('Accept deal error:', error);
+      throw error;
+    }
   },
 
   async addMessage(id: string, message: string): Promise<{ success: boolean; message: string; data: any }> {
