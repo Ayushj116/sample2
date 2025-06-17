@@ -36,6 +36,7 @@ const DealDetailsPage = () => {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [acceptingDeal, setAcceptingDeal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [hasShownKYCAlert, setHasShownKYCAlert] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -57,9 +58,12 @@ const DealDetailsPage = () => {
       if (response.success) {
         setDeal(response.data.deal);
         
-        // Check if KYC is required and redirect
-        if (response.data.deal.status === 'accepted' && user?.kycStatus !== 'approved') {
-          // Show KYC requirement message
+        // Check if KYC is required and redirect (only show once)
+        if (response.data.deal.status === 'accepted' && 
+            user?.kycStatus !== 'approved' && 
+            !hasShownKYCAlert) {
+          setHasShownKYCAlert(true);
+          // Show KYC requirement message after a delay
           setTimeout(() => {
             if (window.confirm('KYC verification is required to proceed with this deal. Would you like to complete it now?')) {
               navigate('/kyc');
@@ -265,7 +269,7 @@ const DealDetailsPage = () => {
           </div>
         )}
 
-        {/* KYC Warning */}
+        {/* KYC Warning - Only show if deal is accepted and user KYC is not approved */}
         {deal.status === 'accepted' && user?.kycStatus !== 'approved' && (
           <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-center justify-between">

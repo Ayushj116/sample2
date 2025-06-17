@@ -28,7 +28,7 @@ const KYCPage = () => {
   const [uploadingDocs, setUploadingDocs] = useState<Record<string, boolean>>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
 
   const [personalInfo, setPersonalInfo] = useState({
@@ -229,6 +229,13 @@ const KYCPage = () => {
       
       if (response.success) {
         setSuccessMessage('KYC submitted for verification successfully');
+        
+        // Update user KYC status in context
+        if (user) {
+          const updatedUser = { ...user, kycStatus: 'in_progress' as const };
+          updateUser(updatedUser);
+        }
+        
         fetchKYCData();
         
         // Redirect to dashboard after successful submission
@@ -282,7 +289,8 @@ const KYCPage = () => {
     isRequired?: boolean;
     acceptedFormats?: string;
   }) => {
-    const isUploaded = kycData?.documents?.[docType as keyof typeof kycData.documents];
+    const documentData = kycData?.documents?.[docType as keyof typeof kycData.documents];
+    const isUploaded = documentData && documentData.fileUrl;
     const isUploading = uploadingDocs[docType];
     
     return (
@@ -308,11 +316,11 @@ const KYCPage = () => {
             <div className="flex items-center space-x-2">
               <CheckCircle className="w-5 h-5 text-green-600" />
               <span className="text-sm font-medium text-green-800">
-                Document uploaded and {isUploaded.verified ? 'verified' : 'pending verification'}
+                Document uploaded and {documentData.verified ? 'verified' : 'pending verification'}
               </span>
             </div>
-            {isUploaded.verificationNotes && (
-              <p className="text-sm text-green-700 mt-2">{isUploaded.verificationNotes}</p>
+            {documentData.verificationNotes && (
+              <p className="text-sm text-green-700 mt-2">{documentData.verificationNotes}</p>
             )}
           </div>
         ) : (
@@ -341,6 +349,21 @@ const KYCPage = () => {
         )}
       </div>
     );
+  };
+
+  // Check if KYC is complete enough to be considered approved
+  const isKYCComplete = () => {
+    if (!kycData) return false;
+    
+    // Check if basic documents are uploaded
+    const hasRequiredDocs = kycData.documents?.panCard?.fileUrl && 
+                           kycData.documents?.aadhaarFront?.fileUrl && 
+                           kycData.documents?.bankStatement?.fileUrl;
+    
+    // Check if basic info is filled
+    const hasBasicInfo = personalInfo.panNumber && personalInfo.aadhaarNumber;
+    
+    return hasRequiredDocs && hasBasicInfo && kycData.status === 'approved';
   };
 
   if (isLoading) {
@@ -406,6 +429,16 @@ const KYCPage = () => {
               </div>
             </div>
           </div>
+          
+          {/* Show completion status */}
+          {isKYCComplete() && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center">
+                <CheckCircle className="w-5 h-5 text-green-600 mr-2" />
+                <span className="text-green-800 font-medium">KYC verification completed successfully!</span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
@@ -726,14 +759,16 @@ const KYCPage = () => {
             Save & Continue Later
           </Link>
           
-          <button
-            onClick={submitKYC}
-            disabled={isSaving}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50"
-          >
-            <Shield className="w-5 h-5 mr-2" />
-            {isSaving ? 'Submitting...' : 'Submit for Verification'}
-          </button>
+          {!isKYCComplete() && (
+            <button
+              onClick={submitKYC}
+              disabled={isSaving}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center disabled:opacity-50"
+            >
+              <Shield className="w-5 h-5 mr-2" />
+              {isSaving ? 'Submitting...' : 'Submit for Verification'}
+            </button>
+          )}
         </div>
 
         {/* Help Section */}
