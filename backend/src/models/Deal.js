@@ -305,15 +305,17 @@ dealSchema.pre('save', async function(next) {
 
 // Method to get next action for user
 dealSchema.methods.getNextAction = function(userId) {
+  // Convert ObjectIds to strings for comparison
   const userIdStr = userId.toString();
-  const buyerIdStr = this.buyer.toString();
-  const sellerIdStr = this.seller.toString();
-  const initiatedByStr = this.initiatedBy.toString();
+  const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
+  const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  const initiatedByStr = this.initiatedBy._id ? this.initiatedBy._id.toString() : this.initiatedBy.toString();
   
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
   const isInitiator = userIdStr === initiatedByStr;
   
+  // Check if user is authorized for this deal
   if (!isBuyer && !isSeller) {
     return 'Not authorized for this deal';
   }
@@ -405,9 +407,9 @@ dealSchema.methods.getProgress = function() {
 // Method to check if user can perform action
 dealSchema.methods.canUserPerformAction = function(userId, action) {
   const userIdStr = userId.toString();
-  const buyerIdStr = this.buyer.toString();
-  const sellerIdStr = this.seller.toString();
-  const initiatedByStr = this.initiatedBy.toString();
+  const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
+  const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  const initiatedByStr = this.initiatedBy._id ? this.initiatedBy._id.toString() : this.initiatedBy.toString();
   
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
