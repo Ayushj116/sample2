@@ -509,24 +509,71 @@ dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
   const requiredDocNames = requiredDocs.filter(doc => doc.required).map(doc => doc.name);
   
   if (requiredDocNames.length === 0) {
-    // No documents required for this role, proceed to payment
-    if (isBuyer) {
-      return 'Proceed to payment deposit';
+    // No documents required for this role, check if we can proceed to payment
+    const buyerRequiredDocs = this.getRequiredDocuments('buyer');
+    const sellerRequiredDocs = this.getRequiredDocuments('seller');
+    
+    const buyerNeedsNoDocs = buyerRequiredDocs.filter(doc => doc.required).length === 0;
+    const sellerNeedsNoDocs = sellerRequiredDocs.filter(doc => doc.required).length === 0;
+    
+    const buyerDocsComplete = buyerNeedsNoDocs || this.workflow.documentsUploaded.buyerDocs;
+    const sellerDocsComplete = sellerNeedsNoDocs || this.workflow.documentsUploaded.sellerDocs;
+    
+    if (buyerDocsComplete && sellerDocsComplete) {
+      if (isBuyer) {
+        return 'Proceed to payment deposit';
+      } else {
+        return 'Waiting for buyer to deposit payment';
+      }
     } else {
-      return 'Waiting for buyer to deposit payment';
+      return 'Waiting for counterparty documents';
     }
   }
   
   // Check if user has uploaded required documents
   const userDocs = this.documents.filter(doc => doc.uploadedBy.toString() === userIdStr);
-  const uploadedDocTypes = userDocs.map(doc => doc.documentType);
+  const uploadedDocTypes = [...new Set(userDocs.map(doc => doc.documentType))];
+  const requiredDocTypes = requiredDocs.filter(doc => doc.required).map(doc => doc.type);
   
-  if (isSeller && !this.workflow.documentsUploaded.sellerDocs) {
-    return `Upload required documents: ${requiredDocNames.slice(0, 2).join(', ')}${requiredDocNames.length > 2 ? ` and ${requiredDocNames.length - 2} more` : ''}`;
-  } else if (isBuyer && !this.workflow.documentsUploaded.buyerDocs && requiredDocNames.length > 0) {
-    return `Upload required documents: ${requiredDocNames.slice(0, 2).join(', ')}${requiredDocNames.length > 2 ? ` and ${requiredDocNames.length - 2} more` : ''}`;
+  const hasAllRequiredDocs = requiredDocTypes.every(type => uploadedDocTypes.includes(type));
+  
+  if (hasAllRequiredDocs) {
+    // User has uploaded all required docs, check if counterparty needs to upload
+    const counterpartyRole = isBuyer ? 'seller' : 'buyer';
+    const counterpartyRequiredDocs = this.getRequiredDocuments(counterpartyRole);
+    const counterpartyRequiredDocTypes = counterpartyRequiredDocs.filter(doc => doc.required).map(doc => doc.type);
+    
+    if (counterpartyRequiredDocTypes.length === 0) {
+      // Counterparty doesn't need docs, proceed to payment
+      if (isBuyer) {
+        return 'Proceed to payment deposit';
+      } else {
+        return 'Waiting for buyer to deposit payment';
+      }
+    } else {
+      // Check if counterparty has uploaded their docs
+      const counterpartyUserId = isBuyer ? sellerIdStr : buyerIdStr;
+      const counterpartyDocs = this.documents.filter(doc => doc.uploadedBy.toString() === counterpartyUserId);
+      const counterpartyUploadedTypes = [...new Set(counterpartyDocs.map(doc => doc.documentType))];
+      
+      const counterpartyHasAllDocs = counterpartyRequiredDocTypes.every(type => counterpartyUploadedTypes.includes(type));
+      
+      if (counterpartyHasAllDocs) {
+        if (isBuyer) {
+          return 'Proceed to payment deposit';
+        } else {
+          return 'Waiting for buyer to deposit payment';
+        }
+      } else {
+        return 'Waiting for counterparty documents';
+      }
+    }
   } else {
-    return 'Waiting for counterparty documents';
+    // User still needs to upload documents
+    const missingTypes = requiredDocTypes.filter(type => !uploadedDocTypes.includes(type));
+    const missingDocNames = requiredDocs.filter(doc => doc.required && missingTypes.includes(doc.type)).map(doc => doc.name);
+    
+    return `Upload required documents: ${missingDocNames.slice(0, 2).join(', ')}${missingDocNames.length > 2 ? ` and ${missingDocNames.length - 2} more` : ''}`;
   }
 };
 

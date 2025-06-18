@@ -807,7 +807,8 @@ export const uploadDealDocument = async (req, res) => {
       }
 
       try {
-        const deal = await Deal.findById(dealId);
+        const deal = await Deal.findById(dealId)
+          .populate('buyer seller', 'firstName lastName fullName kycStatus');
         
         if (!deal) {
           // Clean up uploaded file
@@ -827,8 +828,8 @@ export const uploadDealDocument = async (req, res) => {
 
         // Check if user is authorized to upload documents for this deal
         const userIdStr = req.user.userId;
-        const buyerIdStr = deal.buyer.toString();
-        const sellerIdStr = deal.seller.toString();
+        const buyerIdStr = deal.buyer._id.toString();
+        const sellerIdStr = deal.seller._id.toString();
 
         if (userIdStr !== buyerIdStr && userIdStr !== sellerIdStr) {
           // Clean up uploaded file
@@ -867,6 +868,51 @@ export const uploadDealDocument = async (req, res) => {
           message: `${user.fullName} uploaded ${documentType} document: ${req.file.originalname}`,
           isSystemMessage: true
         });
+
+        // Check if this completes the document requirements and update workflow
+        const isBuyer = userIdStr === buyerIdStr;
+        const isSeller = userIdStr === sellerIdStr;
+        
+        // Get required documents for this user role
+        const requiredDocs = deal.getRequiredDocuments(isBuyer ? 'buyer' : 'seller');
+        const requiredDocTypes = requiredDocs.filter(doc => doc.required).map(doc => doc.type);
+        
+        // Check if user has uploaded all required documents
+        const userDocs = deal.documents.filter(doc => doc.uploadedBy.toString() === userIdStr);
+        const uploadedDocTypes = [...new Set(userDocs.map(doc => doc.documentType))];
+        
+        const hasAllRequiredDocs = requiredDocTypes.every(type => uploadedDocTypes.includes(type));
+        
+        if (hasAllRequiredDocs) {
+          if (isBuyer) {
+            deal.workflow.documentsUploaded.buyerDocs = true;
+          } else if (isSeller) {
+            deal.workflow.documentsUploaded.sellerDocs = true;
+          }
+          
+          // Check if both parties have uploaded their documents (or if only seller docs are required)
+          const buyerRequiredDocs = deal.getRequiredDocuments('buyer');
+          const sellerRequiredDocs = deal.getRequiredDocuments('seller');
+          
+          const buyerNeedsNoDocs = buyerRequiredDocs.filter(doc => doc.required).length === 0;
+          const sellerNeedsNoDocs = sellerRequiredDocs.filter(doc => doc.required).length === 0;
+          
+          const buyerDocsComplete = buyerNeedsNoDocs || deal.workflow.documentsUploaded.buyerDocs;
+          const sellerDocsComplete = sellerNeedsNoDocs || deal.workflow.documentsUploaded.sellerDocs;
+          
+          if (buyerDocsComplete && sellerDocsComplete) {
+            deal.workflow.documentsUploaded.completed = true;
+            deal.workflow.documentsUploaded.completedAt = new Date();
+            deal.status = 'payment_pending';
+            
+            // Add system message about document completion
+            deal.messages.push({
+              sender: req.user.userId,
+              message: 'All required documents have been uploaded. Deal is now ready for payment deposit.',
+              isSystemMessage: true
+            });
+          }
+        }
         
         await deal.save();
 
@@ -875,7 +921,9 @@ export const uploadDealDocument = async (req, res) => {
           dealId,
           documentType,
           fileName: req.file.originalname,
-          fileSize: req.file.size
+          fileSize: req.file.size,
+          workflowUpdated: hasAllRequiredDocs,
+          newStatus: deal.status
         });
 
         res.json({
@@ -886,7 +934,9 @@ export const uploadDealDocument = async (req, res) => {
             fileUrl: `/uploads/${req.file.filename}`,
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
-            documentType: documentType
+            documentType: documentType,
+            workflowUpdated: hasAllRequiredDocs,
+            dealStatus: deal.status
           }
         });
 
