@@ -127,7 +127,11 @@ const dealSchema = new mongoose.Schema({
       completed: { type: Boolean, default: false },
       completedAt: Date,
       buyerDocs: { type: Boolean, default: false },
-      sellerDocs: { type: Boolean, default: false }
+      sellerDocs: { type: Boolean, default: false },
+      buyerRequiredDocs: [String], // Track which docs buyer needs
+      sellerRequiredDocs: [String], // Track which docs seller needs
+      buyerUploadedDocs: [String], // Track which docs buyer uploaded
+      sellerUploadedDocs: [String] // Track which docs seller uploaded
     },
     paymentDeposited: {
       completed: { type: Boolean, default: false },
@@ -290,13 +294,32 @@ dealSchema.index({ amount: 1 });
 dealSchema.index({ createdAt: -1 });
 dealSchema.index({ flagged: 1 });
 
-// Pre-save middleware to generate deal ID
+// Pre-save middleware to generate deal ID and initialize required documents
 dealSchema.pre('save', async function(next) {
   if (!this.dealId) {
     // Generate a more unique deal ID using timestamp and random number
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substr(2, 5);
     this.dealId = `ST${timestamp}${random}`.toUpperCase();
+  }
+  
+  // Initialize required documents arrays if not set
+  if (!this.workflow.documentsUploaded.buyerRequiredDocs || this.workflow.documentsUploaded.buyerRequiredDocs.length === 0) {
+    const buyerDocs = this.getRequiredDocuments('buyer');
+    this.workflow.documentsUploaded.buyerRequiredDocs = buyerDocs.filter(doc => doc.required).map(doc => doc.type);
+  }
+  
+  if (!this.workflow.documentsUploaded.sellerRequiredDocs || this.workflow.documentsUploaded.sellerRequiredDocs.length === 0) {
+    const sellerDocs = this.getRequiredDocuments('seller');
+    this.workflow.documentsUploaded.sellerRequiredDocs = sellerDocs.filter(doc => doc.required).map(doc => doc.type);
+  }
+  
+  // Initialize uploaded docs arrays if not set
+  if (!this.workflow.documentsUploaded.buyerUploadedDocs) {
+    this.workflow.documentsUploaded.buyerUploadedDocs = [];
+  }
+  if (!this.workflow.documentsUploaded.sellerUploadedDocs) {
+    this.workflow.documentsUploaded.sellerUploadedDocs = [];
   }
   
   this.updatedAt = Date.now();
@@ -351,6 +374,76 @@ dealSchema.methods.getRequiredDocuments = function(userRole) {
   }
 
   return documents[userRole] || [];
+};
+
+// Method to check if user has uploaded all required documents
+dealSchema.methods.hasUserUploadedAllRequiredDocs = function(userId) {
+  const userIdStr = userId.toString();
+  const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
+  const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  
+  const isBuyer = userIdStr === buyerIdStr;
+  const isSeller = userIdStr === sellerIdStr;
+  
+  if (isBuyer) {
+    const requiredDocs = this.workflow.documentsUploaded.buyerRequiredDocs || [];
+    const uploadedDocs = this.workflow.documentsUploaded.buyerUploadedDocs || [];
+    return requiredDocs.length > 0 && requiredDocs.every(docType => uploadedDocs.includes(docType));
+  } else if (isSeller) {
+    const requiredDocs = this.workflow.documentsUploaded.sellerRequiredDocs || [];
+    const uploadedDocs = this.workflow.documentsUploaded.sellerUploadedDocs || [];
+    return requiredDocs.length > 0 && requiredDocs.every(docType => uploadedDocs.includes(docType));
+  }
+  
+  return false;
+};
+
+// Method to update document upload status
+dealSchema.methods.updateDocumentUploadStatus = function(userId, documentType) {
+  const userIdStr = userId.toString();
+  const buyerIdStr = this.buyer._id ? this.buyer._id.toString() : this.buyer.toString();
+  const sellerIdStr = this.seller._id ? this.seller._id.toString() : this.seller.toString();
+  
+  const isBuyer = userIdStr === buyerIdStr;
+  const isSeller = userIdStr === sellerIdStr;
+  
+  if (isBuyer) {
+    if (!this.workflow.documentsUploaded.buyerUploadedDocs.includes(documentType)) {
+      this.workflow.documentsUploaded.buyerUploadedDocs.push(documentType);
+    }
+    
+    // Check if buyer has uploaded all required docs
+    const requiredDocs = this.workflow.documentsUploaded.buyerRequiredDocs || [];
+    const uploadedDocs = this.workflow.documentsUploaded.buyerUploadedDocs || [];
+    this.workflow.documentsUploaded.buyerDocs = requiredDocs.length > 0 && 
+      requiredDocs.every(docType => uploadedDocs.includes(docType));
+  } else if (isSeller) {
+    if (!this.workflow.documentsUploaded.sellerUploadedDocs.includes(documentType)) {
+      this.workflow.documentsUploaded.sellerUploadedDocs.push(documentType);
+    }
+    
+    // Check if seller has uploaded all required docs
+    const requiredDocs = this.workflow.documentsUploaded.sellerRequiredDocs || [];
+    const uploadedDocs = this.workflow.documentsUploaded.sellerUploadedDocs || [];
+    this.workflow.documentsUploaded.sellerDocs = requiredDocs.length > 0 && 
+      requiredDocs.every(docType => uploadedDocs.includes(docType));
+  }
+  
+  // Check if both parties have completed their document uploads
+  const buyerRequiredDocs = this.workflow.documentsUploaded.buyerRequiredDocs || [];
+  const sellerRequiredDocs = this.workflow.documentsUploaded.sellerRequiredDocs || [];
+  
+  const buyerNeedsNoDocs = buyerRequiredDocs.length === 0;
+  const sellerNeedsNoDocs = sellerRequiredDocs.length === 0;
+  
+  const buyerDocsComplete = buyerNeedsNoDocs || this.workflow.documentsUploaded.buyerDocs;
+  const sellerDocsComplete = sellerNeedsNoDocs || this.workflow.documentsUploaded.sellerDocs;
+  
+  if (buyerDocsComplete && sellerDocsComplete && !this.workflow.documentsUploaded.completed) {
+    this.workflow.documentsUploaded.completed = true;
+    this.workflow.documentsUploaded.completedAt = new Date();
+    this.status = 'payment_pending';
+  }
 };
 
 // Method to get next action for user (now async to check KYC status)
@@ -505,37 +598,49 @@ dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
   const isBuyer = userIdStr === buyerIdStr;
   const isSeller = userIdStr === sellerIdStr;
   
+  // Get required documents for this user
   const requiredDocs = this.getRequiredDocuments(isBuyer ? 'buyer' : 'seller');
-  const requiredDocNames = requiredDocs.filter(doc => doc.required).map(doc => doc.name);
+  const requiredDocTypes = requiredDocs.filter(doc => doc.required).map(doc => doc.type);
   
-  if (requiredDocNames.length === 0) {
-    // No documents required for this role, check if we can proceed to payment
-    const buyerRequiredDocs = this.getRequiredDocuments('buyer');
-    const sellerRequiredDocs = this.getRequiredDocuments('seller');
+  if (requiredDocTypes.length === 0) {
+    // No documents required for this role, check if counterparty needs to upload
+    const counterpartyRole = isBuyer ? 'seller' : 'buyer';
+    const counterpartyRequiredDocs = this.getRequiredDocuments(counterpartyRole);
+    const counterpartyRequiredDocTypes = counterpartyRequiredDocs.filter(doc => doc.required).map(doc => doc.type);
     
-    const buyerNeedsNoDocs = buyerRequiredDocs.filter(doc => doc.required).length === 0;
-    const sellerNeedsNoDocs = sellerRequiredDocs.filter(doc => doc.required).length === 0;
-    
-    const buyerDocsComplete = buyerNeedsNoDocs || this.workflow.documentsUploaded.buyerDocs;
-    const sellerDocsComplete = sellerNeedsNoDocs || this.workflow.documentsUploaded.sellerDocs;
-    
-    if (buyerDocsComplete && sellerDocsComplete) {
+    if (counterpartyRequiredDocTypes.length === 0) {
+      // Neither party needs docs, proceed to payment
       if (isBuyer) {
         return 'Proceed to payment deposit';
       } else {
         return 'Waiting for buyer to deposit payment';
       }
     } else {
-      return 'Waiting for counterparty documents';
+      // Check if counterparty has uploaded their docs
+      const counterpartyUploadedDocs = isBuyer ? 
+        (this.workflow.documentsUploaded.sellerUploadedDocs || []) :
+        (this.workflow.documentsUploaded.buyerUploadedDocs || []);
+      
+      const counterpartyHasAllDocs = counterpartyRequiredDocTypes.every(type => counterpartyUploadedDocs.includes(type));
+      
+      if (counterpartyHasAllDocs) {
+        if (isBuyer) {
+          return 'Proceed to payment deposit';
+        } else {
+          return 'Waiting for buyer to deposit payment';
+        }
+      } else {
+        return 'Waiting for counterparty documents';
+      }
     }
   }
   
-  // Check if user has uploaded required documents
-  const userDocs = this.documents.filter(doc => doc.uploadedBy.toString() === userIdStr);
-  const uploadedDocTypes = [...new Set(userDocs.map(doc => doc.documentType))];
-  const requiredDocTypes = requiredDocs.filter(doc => doc.required).map(doc => doc.type);
+  // Check if user has uploaded all required documents
+  const userUploadedDocs = isBuyer ? 
+    (this.workflow.documentsUploaded.buyerUploadedDocs || []) :
+    (this.workflow.documentsUploaded.sellerUploadedDocs || []);
   
-  const hasAllRequiredDocs = requiredDocTypes.every(type => uploadedDocTypes.includes(type));
+  const hasAllRequiredDocs = requiredDocTypes.every(type => userUploadedDocs.includes(type));
   
   if (hasAllRequiredDocs) {
     // User has uploaded all required docs, check if counterparty needs to upload
@@ -552,11 +657,11 @@ dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
       }
     } else {
       // Check if counterparty has uploaded their docs
-      const counterpartyUserId = isBuyer ? sellerIdStr : buyerIdStr;
-      const counterpartyDocs = this.documents.filter(doc => doc.uploadedBy.toString() === counterpartyUserId);
-      const counterpartyUploadedTypes = [...new Set(counterpartyDocs.map(doc => doc.documentType))];
+      const counterpartyUploadedDocs = isBuyer ? 
+        (this.workflow.documentsUploaded.sellerUploadedDocs || []) :
+        (this.workflow.documentsUploaded.buyerUploadedDocs || []);
       
-      const counterpartyHasAllDocs = counterpartyRequiredDocTypes.every(type => counterpartyUploadedTypes.includes(type));
+      const counterpartyHasAllDocs = counterpartyRequiredDocTypes.every(type => counterpartyUploadedDocs.includes(type));
       
       if (counterpartyHasAllDocs) {
         if (isBuyer) {
@@ -570,7 +675,7 @@ dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
     }
   } else {
     // User still needs to upload documents
-    const missingTypes = requiredDocTypes.filter(type => !uploadedDocTypes.includes(type));
+    const missingTypes = requiredDocTypes.filter(type => !userUploadedDocs.includes(type));
     const missingDocNames = requiredDocs.filter(doc => doc.required && missingTypes.includes(doc.type)).map(doc => doc.name);
     
     return `Upload required documents: ${missingDocNames.slice(0, 2).join(', ')}${missingDocNames.length > 2 ? ` and ${missingDocNames.length - 2} more` : ''}`;

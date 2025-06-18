@@ -869,72 +869,17 @@ export const uploadDealDocument = async (req, res) => {
           isSystemMessage: true
         });
 
-        // Check if this completes the document requirements and update workflow
-        const isBuyer = userIdStr === buyerIdStr;
-        const isSeller = userIdStr === sellerIdStr;
-        
-        // Get required documents for this user role
-        const requiredDocs = deal.getRequiredDocuments(isBuyer ? 'buyer' : 'seller');
-        const requiredDocTypes = requiredDocs.filter(doc => doc.required).map(doc => doc.type);
-        
-        // Check if user has uploaded all required documents
-        const userDocs = deal.documents.filter(doc => doc.uploadedBy.toString() === userIdStr);
-        const uploadedDocTypes = [...new Set(userDocs.map(doc => doc.documentType))];
-        
-        const hasAllRequiredDocs = requiredDocTypes.every(type => uploadedDocTypes.includes(type));
+        // Update document upload status using the new method
+        deal.updateDocumentUploadStatus(req.user.userId, documentType);
         
         console.log('Document upload workflow check:', {
-          userRole: isBuyer ? 'buyer' : 'seller',
-          requiredDocTypes,
-          uploadedDocTypes,
-          hasAllRequiredDocs,
-          currentWorkflow: deal.workflow.documentsUploaded
+          userRole: userIdStr === buyerIdStr ? 'buyer' : 'seller',
+          documentType,
+          buyerDocs: deal.workflow.documentsUploaded.buyerDocs,
+          sellerDocs: deal.workflow.documentsUploaded.sellerDocs,
+          completed: deal.workflow.documentsUploaded.completed,
+          status: deal.status
         });
-        
-        if (hasAllRequiredDocs) {
-          if (isBuyer) {
-            deal.workflow.documentsUploaded.buyerDocs = true;
-          } else if (isSeller) {
-            deal.workflow.documentsUploaded.sellerDocs = true;
-          }
-          
-          console.log('Updated workflow after user docs completion:', {
-            buyerDocs: deal.workflow.documentsUploaded.buyerDocs,
-            sellerDocs: deal.workflow.documentsUploaded.sellerDocs
-          });
-          
-          // Check if both parties have uploaded their documents (or if only one party needs docs)
-          const buyerRequiredDocs = deal.getRequiredDocuments('buyer');
-          const sellerRequiredDocs = deal.getRequiredDocuments('seller');
-          
-          const buyerNeedsNoDocs = buyerRequiredDocs.filter(doc => doc.required).length === 0;
-          const sellerNeedsNoDocs = sellerRequiredDocs.filter(doc => doc.required).length === 0;
-          
-          const buyerDocsComplete = buyerNeedsNoDocs || deal.workflow.documentsUploaded.buyerDocs;
-          const sellerDocsComplete = sellerNeedsNoDocs || deal.workflow.documentsUploaded.sellerDocs;
-          
-          console.log('Final workflow check:', {
-            buyerNeedsNoDocs,
-            sellerNeedsNoDocs,
-            buyerDocsComplete,
-            sellerDocsComplete
-          });
-          
-          if (buyerDocsComplete && sellerDocsComplete) {
-            deal.workflow.documentsUploaded.completed = true;
-            deal.workflow.documentsUploaded.completedAt = new Date();
-            deal.status = 'payment_pending';
-            
-            // Add system message about document completion
-            deal.messages.push({
-              sender: req.user.userId,
-              message: 'All required documents have been uploaded. Deal is now ready for payment deposit.',
-              isSystemMessage: true
-            });
-            
-            console.log('Documents workflow completed, status updated to payment_pending');
-          }
-        }
         
         await deal.save();
 
@@ -944,7 +889,7 @@ export const uploadDealDocument = async (req, res) => {
           documentType,
           fileName: req.file.originalname,
           fileSize: req.file.size,
-          workflowUpdated: hasAllRequiredDocs,
+          workflowUpdated: deal.workflow.documentsUploaded.completed,
           newStatus: deal.status,
           finalWorkflow: deal.workflow.documentsUploaded
         });
@@ -958,7 +903,7 @@ export const uploadDealDocument = async (req, res) => {
             fileSize: req.file.size,
             mimeType: req.file.mimetype,
             documentType: documentType,
-            workflowUpdated: hasAllRequiredDocs,
+            workflowUpdated: deal.workflow.documentsUploaded.completed,
             dealStatus: deal.status,
             workflow: deal.workflow.documentsUploaded
           }

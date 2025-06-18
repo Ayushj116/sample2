@@ -294,6 +294,27 @@ const DealDetailsPage = () => {
     return deal.nextAction.includes('Upload required documents');
   };
 
+  const getUserUploadedDocuments = () => {
+    if (!deal) return [];
+    
+    // Get documents uploaded by current user
+    return deal.documents.filter(doc => 
+      doc.uploadedBy === user?.id || 
+      doc.uploadedBy._id === user?.id ||
+      doc.uploadedBy.toString() === user?.id
+    );
+  };
+
+  const hasUserUploadedDocument = (documentType: string) => {
+    const userDocs = getUserUploadedDocuments();
+    return userDocs.some(doc => doc.documentType === documentType);
+  };
+
+  const getUploadedDocumentByType = (documentType: string) => {
+    const userDocs = getUserUploadedDocuments();
+    return userDocs.find(doc => doc.documentType === documentType);
+  };
+
   const DocumentUploadSection = ({ 
     title, 
     description, 
@@ -307,8 +328,8 @@ const DealDetailsPage = () => {
     isRequired?: boolean;
     acceptedFormats?: string;
   }) => {
-    const documentData = deal?.documents?.find(doc => doc.documentType === docType);
-    const isUploaded = documentData && documentData.fileUrl;
+    const isUploaded = hasUserUploadedDocument(docType);
+    const uploadedDoc = getUploadedDocumentByType(docType);
     const isUploading = uploadingDocs[docType];
     
     return (
@@ -338,9 +359,9 @@ const DealDetailsPage = () => {
               </span>
             </div>
             <p className="text-sm text-green-700 mt-1">
-              File: {documentData.fileName}
+              File: {uploadedDoc?.fileName}
             </p>
-            {documentData.verified && (
+            {uploadedDoc?.verified && (
               <p className="text-sm text-green-700 mt-2">✓ Verified</p>
             )}
           </div>
@@ -507,6 +528,9 @@ const DealDetailsPage = () => {
                       <span className={`text-sm ${doc.required ? 'font-medium text-blue-900' : 'text-blue-700'}`}>
                         {doc.name} {doc.required && <span className="text-red-500">*</span>}
                       </span>
+                      {hasUserUploadedDocument(doc.type) && (
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -618,7 +642,7 @@ const DealDetailsPage = () => {
                     <span className="text-xs font-bold text-gray-600">2</span>
                   </div>
                   <span className="text-sm text-gray-700">
-                    <strong>Document Upload:</strong> Upload ownership/authenticity documents
+                    <strong>Document Upload:</strong> Both parties upload their required documents
                   </span>
                 </div>
                 <div className="flex items-center space-x-3">
@@ -780,7 +804,7 @@ const DealDetailsPage = () => {
                         className={`flex ${
                           message.isSystemMessage 
                             ? 'justify-center' 
-                            : message.sender._id === user?.id 
+                            : message.sender._id === user?.id || message.sender === user?.id
                               ? 'justify-end' 
                               : 'justify-start'
                         }`}
@@ -789,14 +813,14 @@ const DealDetailsPage = () => {
                           className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                             message.isSystemMessage
                               ? 'bg-gray-100 text-gray-700 text-center text-sm'
-                              : message.sender._id === user?.id
+                              : message.sender._id === user?.id || message.sender === user?.id
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-100 text-gray-900'
                           }`}
                         >
                           {!message.isSystemMessage && (
                             <div className="text-sm font-medium mb-1">
-                              {message.sender._id === user?.id ? 'You' : message.sender.fullName}
+                              {message.sender._id === user?.id || message.sender === user?.id ? 'You' : message.sender.fullName || 'Other Party'}
                             </div>
                           )}
                           <div>{message.message}</div>
@@ -864,7 +888,10 @@ const DealDetailsPage = () => {
                           <div>
                             <div className="font-medium">{doc.fileName}</div>
                             <div className="text-sm text-gray-500">
-                              Uploaded by {doc.uploadedBy.fullName} on {new Date(doc.uploadedAt).toLocaleDateString()}
+                              Uploaded by {doc.uploadedBy.fullName || 'User'} on {new Date(doc.uploadedAt).toLocaleDateString()}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Type: {doc.documentType}
                             </div>
                           </div>
                         </div>
