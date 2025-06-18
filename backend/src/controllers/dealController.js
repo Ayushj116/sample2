@@ -883,6 +883,14 @@ export const uploadDealDocument = async (req, res) => {
         
         const hasAllRequiredDocs = requiredDocTypes.every(type => uploadedDocTypes.includes(type));
         
+        console.log('Document upload workflow check:', {
+          userRole: isBuyer ? 'buyer' : 'seller',
+          requiredDocTypes,
+          uploadedDocTypes,
+          hasAllRequiredDocs,
+          currentWorkflow: deal.workflow.documentsUploaded
+        });
+        
         if (hasAllRequiredDocs) {
           if (isBuyer) {
             deal.workflow.documentsUploaded.buyerDocs = true;
@@ -890,7 +898,12 @@ export const uploadDealDocument = async (req, res) => {
             deal.workflow.documentsUploaded.sellerDocs = true;
           }
           
-          // Check if both parties have uploaded their documents (or if only seller docs are required)
+          console.log('Updated workflow after user docs completion:', {
+            buyerDocs: deal.workflow.documentsUploaded.buyerDocs,
+            sellerDocs: deal.workflow.documentsUploaded.sellerDocs
+          });
+          
+          // Check if both parties have uploaded their documents (or if only one party needs docs)
           const buyerRequiredDocs = deal.getRequiredDocuments('buyer');
           const sellerRequiredDocs = deal.getRequiredDocuments('seller');
           
@@ -899,6 +912,13 @@ export const uploadDealDocument = async (req, res) => {
           
           const buyerDocsComplete = buyerNeedsNoDocs || deal.workflow.documentsUploaded.buyerDocs;
           const sellerDocsComplete = sellerNeedsNoDocs || deal.workflow.documentsUploaded.sellerDocs;
+          
+          console.log('Final workflow check:', {
+            buyerNeedsNoDocs,
+            sellerNeedsNoDocs,
+            buyerDocsComplete,
+            sellerDocsComplete
+          });
           
           if (buyerDocsComplete && sellerDocsComplete) {
             deal.workflow.documentsUploaded.completed = true;
@@ -911,6 +931,8 @@ export const uploadDealDocument = async (req, res) => {
               message: 'All required documents have been uploaded. Deal is now ready for payment deposit.',
               isSystemMessage: true
             });
+            
+            console.log('Documents workflow completed, status updated to payment_pending');
           }
         }
         
@@ -923,7 +945,8 @@ export const uploadDealDocument = async (req, res) => {
           fileName: req.file.originalname,
           fileSize: req.file.size,
           workflowUpdated: hasAllRequiredDocs,
-          newStatus: deal.status
+          newStatus: deal.status,
+          finalWorkflow: deal.workflow.documentsUploaded
         });
 
         res.json({
@@ -936,7 +959,8 @@ export const uploadDealDocument = async (req, res) => {
             mimeType: req.file.mimetype,
             documentType: documentType,
             workflowUpdated: hasAllRequiredDocs,
-            dealStatus: deal.status
+            dealStatus: deal.status,
+            workflow: deal.workflow.documentsUploaded
           }
         });
 
