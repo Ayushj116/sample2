@@ -517,6 +517,7 @@ dealSchema.methods.getNextAction = async function(userId) {
         const [buyerUser, sellerUser] = await Promise.all([
           User.findById(buyerIdStr).select('kycStatus'),
           User.findById(sellerIdStr).select('kycStatus')
+        
         ]);
         
         const sellerKycApproved = sellerUser?.kycStatus === 'approved';

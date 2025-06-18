@@ -936,3 +936,84 @@ export const uploadDealDocument = async (req, res) => {
     });
   }
 };
+
+export const depositPayment = async (req, res) => {
+  try {
+    const deal = await Deal.findById(req.params.id)
+      .populate('buyer seller', 'firstName lastName fullName');
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Deal not found'
+      });
+    }
+
+    const userIdStr = req.user.userId;
+    const buyerIdStr = deal.buyer._id.toString();
+
+    // Only buyer can deposit payment
+    if (userIdStr !== buyerIdStr) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only buyer can deposit payment'
+      });
+    }
+
+    // Check if deal is in correct status
+    if (deal.status !== 'payment_pending') {
+      return res.status(400).json({
+        success: false,
+        message: 'Deal is not ready for payment deposit'
+      });
+    }
+
+    const { paymentMethod, transactionId } = req.body;
+
+    // For demo purposes, we'll simulate payment success
+    // In production, this would integrate with actual payment gateway
+    deal.workflow.paymentDeposited.completed = true;
+    deal.workflow.paymentDeposited.completedAt = new Date();
+    deal.workflow.paymentDeposited.transactionId = transactionId || `TXN${Date.now()}`;
+    deal.workflow.paymentDeposited.paymentMethod = paymentMethod || 'demo';
+    deal.status = 'funds_deposited';
+
+    // Add system message
+    deal.messages.push({
+      sender: req.user.userId,
+      message: `Payment of ₹${deal.amount.toLocaleString()} deposited successfully into escrow`,
+      isSystemMessage: true
+    });
+
+    await deal.save();
+
+    // Send notification to seller
+    try {
+      if (deal.seller.phone) {
+        await sendSMS({
+          to: deal.seller.phone,
+          message: `Payment deposited for deal ${deal.dealId}! ₹${deal.amount.toLocaleString()} is now in secure escrow. Please proceed with delivery.`
+        });
+      }
+    } catch (notificationError) {
+      console.error('Failed to send payment notification:', notificationError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment deposited successfully',
+      data: {
+        transactionId: deal.workflow.paymentDeposited.transactionId,
+        amount: deal.amount,
+        status: deal.status
+      }
+    });
+
+  } catch (error) {
+    console.error('Deposit payment error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};

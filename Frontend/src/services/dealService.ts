@@ -144,6 +144,13 @@ export const dealService = {
     return api.post(`/deals/${id}/send-kyc-reminder`);
   },
 
+  async depositPayment(id: string, paymentData: {
+    paymentMethod: string;
+    transactionId?: string;
+  }): Promise<{ success: boolean; message: string; data: any }> {
+    return api.post(`/deals/${id}/deposit-payment`, paymentData);
+  },
+
   async uploadDealDocument(
     dealId: string, 
     file: File, 

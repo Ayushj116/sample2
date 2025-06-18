@@ -9,7 +9,8 @@ import {
   addMessage,
   cancelDeal,
   sendKYCReminder,
-  uploadDealDocument
+  uploadDealDocument,
+  depositPayment
 } from '../controllers/dealController.js';
 
 const router = express.Router();
@@ -57,6 +58,12 @@ const addMessageValidation = [
   body('message').trim().isLength({ min: 1, max: 1000 }).withMessage('Message must be 1-1000 characters')
 ];
 
+const depositPaymentValidation = [
+  param('id').isMongoId(),
+  body('paymentMethod').optional().isString(),
+  body('transactionId').optional().isString()
+];
+
 // Apply multer error handling to document upload routes
 router.use('/:id/documents', handleMulterError);
 
@@ -68,5 +75,6 @@ router.post('/:id/messages', addMessageValidation, addMessage);
 router.post('/:id/cancel', param('id').isMongoId(), cancelDeal);
 router.post('/:id/send-kyc-reminder', param('id').isMongoId(), sendKYCReminder);
 router.post('/:id/documents', param('id').isMongoId(), uploadDealDocument);
+router.post('/:id/deposit-payment', depositPaymentValidation, depositPayment);
 
 export default router;

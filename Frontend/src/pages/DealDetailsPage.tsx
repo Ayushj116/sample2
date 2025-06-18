@@ -20,7 +20,8 @@ import {
   RefreshCw,
   Bell,
   Info,
-  ExternalLink
+  ExternalLink,
+  CreditCard
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -44,6 +45,8 @@ const DealDetailsPage = () => {
   const [sendingReminder, setSendingReminder] = useState(false);
   const [showDocumentUpload, setShowDocumentUpload] = useState(false);
   const [uploadingDocs, setUploadingDocs] = useState<Record<string, boolean>>({});
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [processingPayment, setProcessingPayment] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -208,6 +211,42 @@ const DealDetailsPage = () => {
     }
   };
 
+  const handleDepositPayment = async (paymentMethod: string) => {
+    if (!deal) return;
+
+    try {
+      setProcessingPayment(true);
+      setError('');
+
+      // For demo purposes, simulate payment processing
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/deals/${deal.id}/deposit-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          paymentMethod,
+          transactionId: `TXN${Date.now()}`
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setShowPaymentModal(false);
+        alert(`Payment of ₹${deal.amount.toLocaleString()} deposited successfully! Transaction ID: ${data.data.transactionId}`);
+        await fetchDeal(true);
+      } else {
+        throw new Error(data.message || 'Payment failed');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Payment failed');
+    } finally {
+      setProcessingPayment(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -292,6 +331,11 @@ const DealDetailsPage = () => {
   const shouldShowDocumentUpload = () => {
     if (!deal) return false;
     return deal.nextAction.includes('Upload required documents');
+  };
+
+  const shouldShowPaymentButton = () => {
+    if (!deal) return false;
+    return deal.status === 'payment_pending' && deal.role === 'buyer' && deal.nextAction.includes('Deposit payment');
   };
 
   const getUserUploadedDocuments = () => {
@@ -552,6 +596,28 @@ const DealDetailsPage = () => {
           </div>
         )}
 
+        {/* Payment Button */}
+        {shouldShowPaymentButton() && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center">
+                <CreditCard className="w-6 h-6 text-green-600 mr-3" />
+                <div>
+                  <h3 className="font-semibold text-green-900">Ready for Payment</h3>
+                  <p className="text-green-800">All documents verified. Deposit ₹{deal.amount.toLocaleString()} into secure escrow.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(true)}
+                className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors flex items-center font-medium"
+              >
+                <CreditCard className="w-5 h-5 mr-2" />
+                Deposit Payment
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Document Upload Modal */}
         {showDocumentUpload && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -586,6 +652,108 @@ const DealDetailsPage = () => {
                 >
                   Done
                 </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Payment Modal */}
+        {showPaymentModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Deposit Payment</h3>
+                <button 
+                  onClick={() => setShowPaymentModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Deal Amount:</span>
+                    <span className="text-xl font-bold text-gray-900">₹{deal.amount.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-gray-600">Escrow Fee:</span>
+                    <span className="text-gray-900">₹{deal.escrowFee.toLocaleString()}</span>
+                  </div>
+                  <div className="border-t pt-2 flex justify-between items-center">
+                    <span className="font-medium text-gray-900">Total to Pay:</span>
+                    <span className="text-xl font-bold text-green-600">₹{(deal.amount + deal.escrowFee).toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-medium text-gray-900">Select Payment Method:</h4>
+                  
+                  <button
+                    onClick={() => handleDepositPayment('upi')}
+                    disabled={processingPayment}
+                    className="w-full p-4 border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors text-left disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <span className="text-blue-600 font-bold">UPI</span>
+                      </div>
+                      <div>
+                        <div className="font-medium">UPI Payment</div>
+                        <div className="text-sm text-gray-500">Pay using UPI apps like GPay, PhonePe</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleDepositPayment('netbanking')}
+                    disabled={processingPayment}
+                    className="w-full p-4 border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors text-left disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+                        <span className="text-green-600 font-bold">NB</span>
+                      </div>
+                      <div>
+                        <div className="font-medium">Net Banking</div>
+                        <div className="text-sm text-gray-500">Pay using your bank account</div>
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleDepositPayment('card')}
+                    disabled={processingPayment}
+                    className="w-full p-4 border border-gray-300 rounded-lg hover:bg-blue-50 hover:border-blue-300 transition-colors text-left disabled:opacity-50"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <CreditCard className="w-5 h-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <div className="font-medium">Debit/Credit Card</div>
+                        <div className="text-sm text-gray-500">Pay using your card</div>
+                      </div>
+                    </div>
+                  </button>
+                </div>
+
+                {processingPayment && (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                    <p className="text-gray-600">Processing payment...</p>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <div className="flex items-start space-x-2">
+                    <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+                    <div className="text-sm text-blue-800">
+                      <strong>Secure Payment:</strong> Your payment will be held in a secure escrow account until the transaction is completed.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
