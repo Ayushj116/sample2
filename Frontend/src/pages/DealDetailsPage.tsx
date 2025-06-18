@@ -182,12 +182,18 @@ const DealDetailsPage = () => {
         // Show success message
         alert(`Document uploaded successfully`);
         
-        // Refresh deal data to get updated document status
+        // Refresh deal data to get updated document status and workflow
         await fetchDeal(true);
         
-        // Close the upload modal after successful upload
+        // Check if all required documents are uploaded after refresh
         setTimeout(() => {
-          setShowDocumentUpload(false);
+          // The deal state will be updated by fetchDeal, so we can check the new status
+          fetchDeal(true).then(() => {
+            // If the deal status has changed to payment_pending, close the modal
+            if (deal?.status === 'payment_pending') {
+              setShowDocumentUpload(false);
+            }
+          });
         }, 1000);
       } else {
         throw new Error(result.message || 'Upload failed');
