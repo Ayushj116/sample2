@@ -1017,3 +1017,188 @@ export const depositPayment = async (req, res) => {
     });
   }
 };
+
+export const markDelivered = async (req, res) => {
+  try {
+    const deal = await Deal.findById(req.params.id)
+      .populate('buyer seller', 'firstName lastName fullName phone');
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Deal not found'
+      });
+    }
+
+    const userIdStr = req.user.userId;
+    const sellerIdStr = deal.seller._id.toString();
+
+    // Only seller can mark as delivered
+    if (userIdStr !== sellerIdStr) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only seller can mark item as delivered'
+      });
+    }
+
+    // Check if deal is in correct status
+    if (deal.status !== 'funds_deposited') {
+      return res.status(400).json({
+        success: false,
+        message: 'Deal is not ready for delivery'
+      });
+    }
+
+    const { deliveryNotes, deliveryMethod } = req.body;
+
+    // Update deal workflow
+    deal.workflow.itemDelivered.completed = true;
+    deal.workflow.itemDelivered.completedAt = new Date();
+    deal.workflow.itemDelivered.deliveredBy = req.user.userId;
+    deal.workflow.itemDelivered.deliveryProof = deliveryNotes ? [deliveryNotes] : [];
+    deal.status = 'delivered';
+
+    // Set inspection deadline
+    deal.inspectionDeadline = new Date(Date.now() + deal.inspectionPeriod * 24 * 60 * 60 * 1000);
+
+    // Add system message
+    deal.messages.push({
+      sender: req.user.userId,
+      message: `Item marked as delivered${deliveryNotes ? `: ${deliveryNotes}` : ''}`,
+      isSystemMessage: true
+    });
+
+    await deal.save();
+
+    // Send notification to buyer
+    try {
+      if (deal.buyer.phone) {
+        await sendSMS({
+          to: deal.buyer.phone,
+          message: `Item delivered for deal ${deal.dealId}! Please inspect and confirm receipt within ${deal.inspectionPeriod} days to release funds.`
+        });
+      }
+    } catch (notificationError) {
+      console.error('Failed to send delivery notification:', notificationError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Item marked as delivered successfully',
+      data: {
+        status: deal.status,
+        inspectionDeadline: deal.inspectionDeadline
+      }
+    });
+
+  } catch (error) {
+    console.error('Mark delivered error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+export const confirmReceipt = async (req, res) => {
+  try {
+    const deal = await Deal.findById(req.params.id)
+      .populate('buyer seller', 'firstName lastName fullName phone');
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        message: 'Deal not found'
+      });
+    }
+
+    const userIdStr = req.user.userId;
+    const buyerIdStr = deal.buyer._id.toString();
+
+    // Only buyer can confirm receipt
+    if (userIdStr !== buyerIdStr) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only buyer can confirm receipt'
+      });
+    }
+
+    // Check if deal is in correct status
+    if (deal.status !== 'delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'Deal is not ready for receipt confirmation'
+      });
+    }
+
+    const { rating = 5, feedback = 'Transaction completed successfully' } = req.body;
+
+    // Update deal workflow
+    deal.workflow.buyerConfirmed.completed = true;
+    deal.workflow.buyerConfirmed.completedAt = new Date();
+    deal.workflow.buyerConfirmed.confirmedBy = req.user.userId;
+    deal.workflow.buyerConfirmed.rating = rating;
+    deal.workflow.buyerConfirmed.feedback = feedback;
+
+    // Release funds
+    deal.workflow.fundsReleased.completed = true;
+    deal.workflow.fundsReleased.completedAt = new Date();
+    deal.workflow.fundsReleased.releasedBy = req.user.userId;
+    deal.workflow.fundsReleased.transactionId = `REL${Date.now()}`;
+
+    deal.status = 'completed';
+    deal.completedAt = new Date();
+
+    // Add system message
+    deal.messages.push({
+      sender: req.user.userId,
+      message: `Receipt confirmed and funds released. Deal completed successfully!`,
+      isSystemMessage: true
+    });
+
+    await deal.save();
+
+    // Update user stats
+    try {
+      await Promise.all([
+        User.findByIdAndUpdate(deal.buyer._id, {
+          $inc: { totalDeals: 1, completedDeals: 1, totalVolume: deal.amount }
+        }),
+        User.findByIdAndUpdate(deal.seller._id, {
+          $inc: { totalDeals: 1, completedDeals: 1, totalVolume: deal.amount }
+        })
+      ]);
+    } catch (updateError) {
+      console.error('Failed to update user stats:', updateError);
+    }
+
+    // Send notification to seller
+    try {
+      if (deal.seller.phone) {
+        await sendSMS({
+          to: deal.seller.phone,
+          message: `Great news! Deal ${deal.dealId} completed successfully. Funds of ₹${deal.amount.toLocaleString()} have been released to your account.`
+        });
+      }
+    } catch (notificationError) {
+      console.error('Failed to send completion notification:', notificationError);
+    }
+
+    res.json({
+      success: true,
+      message: 'Receipt confirmed and deal completed successfully!',
+      data: {
+        status: deal.status,
+        completedAt: deal.completedAt,
+        transactionId: deal.workflow.fundsReleased.transactionId
+      }
+    });
+
+  } catch (error) {
+    console.error('Confirm receipt error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};

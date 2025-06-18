@@ -10,7 +10,9 @@ import {
   cancelDeal,
   sendKYCReminder,
   uploadDealDocument,
-  depositPayment
+  depositPayment,
+  markDelivered,
+  confirmReceipt
 } from '../controllers/dealController.js';
 
 const router = express.Router();
@@ -64,6 +66,18 @@ const depositPaymentValidation = [
   body('transactionId').optional().isString()
 ];
 
+const markDeliveredValidation = [
+  param('id').isMongoId(),
+  body('deliveryNotes').optional().isString(),
+  body('deliveryMethod').optional().isString()
+];
+
+const confirmReceiptValidation = [
+  param('id').isMongoId(),
+  body('rating').optional().isInt({ min: 1, max: 5 }),
+  body('feedback').optional().isString()
+];
+
 // Apply multer error handling to document upload routes
 router.use('/:id/documents', handleMulterError);
 
@@ -76,5 +90,7 @@ router.post('/:id/cancel', param('id').isMongoId(), cancelDeal);
 router.post('/:id/send-kyc-reminder', param('id').isMongoId(), sendKYCReminder);
 router.post('/:id/documents', param('id').isMongoId(), uploadDealDocument);
 router.post('/:id/deposit-payment', depositPaymentValidation, depositPayment);
+router.post('/:id/mark-delivered', markDeliveredValidation, markDelivered);
+router.post('/:id/confirm-receipt', confirmReceiptValidation, confirmReceipt);
 
 export default router;
