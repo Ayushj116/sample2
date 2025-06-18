@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Shield, Menu, X, ChevronDown, User, LogOut } from 'lucide-react';
+import { Shield, Menu, X, ChevronDown, User, LogOut, Wallet } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import NotificationCenter from './NotificationCenter';
 
@@ -93,6 +93,19 @@ const Header = () => {
           <div className="hidden md:flex items-center space-x-4">
             {isAuthenticated ? (
               <>
+                {/* Wallet Link */}
+                <Link
+                  to="/wallet"
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+                    location.pathname === '/wallet'
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-blue-600'
+                  }`}
+                >
+                  <Wallet className="w-4 h-4" />
+                  <span className="font-medium">Wallet</span>
+                </Link>
+                
                 {/* Notification Center */}
                 <NotificationCenter />
                 
@@ -121,6 +134,13 @@ const Header = () => {
                         onClick={() => setIsUserMenuOpen(false)}
                       >
                         Dashboard
+                      </Link>
+                      <Link
+                        to="/wallet"
+                        className="block px-4 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                        onClick={() => setIsUserMenuOpen(false)}
+                      >
+                        Wallet & Payments
                       </Link>
                       <Link
                         to="/kyc"
@@ -237,6 +257,13 @@ const Header = () => {
                       onClick={() => setIsMobileMenuOpen(false)}
                     >
                       Dashboard
+                    </Link>
+                    <Link
+                      to="/wallet"
+                      className="block px-3 py-2 text-base font-medium text-gray-700 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                    >
+                      Wallet & Payments
                     </Link>
                     <Link
                       to="/kyc"

@@ -23,7 +23,8 @@ import {
   Truck,
   CreditCard,
   X,
-  RefreshCw
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
@@ -54,6 +55,11 @@ const DealDetailsPage = () => {
   // Delivery form
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [deliveryProof, setDeliveryProof] = useState<File[]>([]);
+
+  // Dispute form
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeDescription, setDisputeDescription] = useState('');
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -211,6 +217,81 @@ const DealDetailsPage = () => {
     }
   };
 
+  const handleRaiseDispute = async () => {
+    if (!deal || !disputeReason || !disputeDescription) return;
+    
+    try {
+      setActionLoading(prev => ({ ...prev, dispute: true }));
+      setError('');
+      
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      
+      const response = await fetch(`${apiUrl}/deals/${deal.id}/raise-dispute`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          reason: disputeReason,
+          description: disputeDescription
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccessMessage('Dispute raised successfully. Our team will review and contact you within 24 hours.');
+        setTimeout(() => setSuccessMessage(''), 5000);
+        setShowDisputeForm(false);
+        setDisputeReason('');
+        setDisputeDescription('');
+        fetchDeal();
+      } else {
+        throw new Error(data.message || 'Failed to raise dispute');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to raise dispute');
+    } finally {
+      setActionLoading(prev => ({ ...prev, dispute: false }));
+    }
+  };
+
+  const handleFixProgress = async () => {
+    if (!deal) return;
+    
+    try {
+      setActionLoading(prev => ({ ...prev, fix: true }));
+      setError('');
+      
+      const token = localStorage.getItem('token');
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      
+      const response = await fetch(`${apiUrl}/deals/${deal.id}/fix-progress`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setSuccessMessage('Deal progress updated successfully!');
+        setTimeout(() => setSuccessMessage(''), 3000);
+        fetchDeal();
+      } else {
+        throw new Error(data.message || 'Failed to fix progress');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to fix progress');
+    } finally {
+      setActionLoading(prev => ({ ...prev, fix: false }));
+    }
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deal || !newMessage.trim()) return;
@@ -308,6 +389,34 @@ const DealDetailsPage = () => {
     const canDeposit = deal.canPerformActions?.depositPayment;
     const canMarkDelivered = deal.canPerformActions?.markDelivered;
     const canConfirm = deal.canPerformActions?.confirmReceipt;
+    const canRaiseDispute = deal.canPerformActions?.raiseDispute;
+
+    // Show fix progress button for completed deals with incorrect progress
+    if (deal.status === 'completed' && deal.progress < 100) {
+      return (
+        <div className="space-y-4">
+          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <div className="flex items-start space-x-3">
+              <AlertTriangle className="w-6 h-6 text-yellow-600 mt-0.5" />
+              <div>
+                <h3 className="font-semibold text-yellow-900 mb-1">Progress Inconsistency Detected</h3>
+                <p className="text-yellow-800 text-sm mb-3">
+                  This deal is marked as completed but shows {deal.progress}% progress. 
+                  Click below to fix the progress tracking.
+                </p>
+                <button
+                  onClick={handleFixProgress}
+                  disabled={actionLoading.fix}
+                  className="bg-yellow-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-yellow-700 transition-colors disabled:opacity-50"
+                >
+                  {actionLoading.fix ? 'Fixing...' : 'Fix Progress'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     if (canAccept) {
       return (
@@ -581,6 +690,82 @@ const DealDetailsPage = () => {
             <div className="bg-white rounded-xl shadow-sm p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Required Action</h3>
               {renderActionButton()}
+              
+              {/* Dispute Button */}
+              {deal.canPerformActions?.raiseDispute && !showDisputeForm && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowDisputeForm(true)}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center"
+                  >
+                    <Flag className="w-4 h-4 mr-2" />
+                    Raise Dispute
+                  </button>
+                </div>
+              )}
+
+              {/* Dispute Form */}
+              {showDisputeForm && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <div className="bg-red-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-red-900 mb-3">Raise Dispute</h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Reason for Dispute
+                        </label>
+                        <select
+                          value={disputeReason}
+                          onChange={(e) => setDisputeReason(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                        >
+                          <option value="">Select a reason</option>
+                          <option value="item_not_received">Item not received</option>
+                          <option value="item_not_as_described">Item not as described</option>
+                          <option value="damaged_item">Damaged item</option>
+                          <option value="seller_unresponsive">Seller unresponsive</option>
+                          <option value="buyer_unresponsive">Buyer unresponsive</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Description
+                        </label>
+                        <textarea
+                          value={disputeDescription}
+                          onChange={(e) => setDisputeDescription(e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                          rows={3}
+                          placeholder="Please provide details about the issue..."
+                          maxLength={500}
+                        />
+                        <p className="text-sm text-gray-500 mt-1">{disputeDescription.length}/500 characters</p>
+                      </div>
+                      <div className="flex space-x-3">
+                        <button
+                          onClick={handleRaiseDispute}
+                          disabled={actionLoading.dispute || !disputeReason || !disputeDescription}
+                          className="bg-red-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
+                        >
+                          {actionLoading.dispute ? 'Submitting...' : 'Submit Dispute'}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowDisputeForm(false);
+                            setDisputeReason('');
+                            setDisputeDescription('');
+                          }}
+                          className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-400 transition-colors"
+                        >
+                          
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Deal Details */}

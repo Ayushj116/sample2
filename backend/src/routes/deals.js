@@ -12,7 +12,9 @@ import {
   uploadDealDocument,
   depositPayment,
   markDelivered,
-  confirmReceipt
+  confirmReceipt,
+  raiseDispute,
+  fixDealProgress
 } from '../controllers/dealController.js';
 
 const router = express.Router();
@@ -78,6 +80,12 @@ const confirmReceiptValidation = [
   body('feedback').optional().isString()
 ];
 
+const raiseDisputeValidation = [
+  param('id').isMongoId(),
+  body('reason').trim().isLength({ min: 5, max: 100 }).withMessage('Reason must be 5-100 characters'),
+  body('description').trim().isLength({ min: 10, max: 500 }).withMessage('Description must be 10-500 characters')
+];
+
 // Apply multer error handling to document upload routes
 router.use('/:id/documents', handleMulterError);
 
@@ -92,5 +100,7 @@ router.post('/:id/documents', param('id').isMongoId(), uploadDealDocument);
 router.post('/:id/deposit-payment', depositPaymentValidation, depositPayment);
 router.post('/:id/mark-delivered', markDeliveredValidation, markDelivered);
 router.post('/:id/confirm-receipt', confirmReceiptValidation, confirmReceipt);
+router.post('/:id/raise-dispute', raiseDisputeValidation, raiseDispute);
+router.post('/:id/fix-progress', param('id').isMongoId(), fixDealProgress);
 
 export default router;

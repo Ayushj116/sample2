@@ -13,6 +13,7 @@ import AdminDashboardPage from './pages/AdminDashboardPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import PricingPage from './pages/PricingPage';
 import SignInPage from './pages/SignInPage';
+import WalletPage from './pages/WalletPage';
 
 function App() {
   return (
@@ -62,6 +63,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <KYCPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/wallet" 
+                element={
+                  <ProtectedRoute>
+                    <WalletPage />
                   </ProtectedRoute>
                 } 
               />
