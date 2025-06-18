@@ -683,21 +683,62 @@ dealSchema.methods.getDocumentUploadAction = function(userIdStr) {
   }
 };
 
-// Method to calculate progress percentage
+// Method to calculate progress percentage - FIXED VERSION
 dealSchema.methods.getProgress = function() {
-  const totalSteps = 8;
+  // Define all possible workflow steps
+  const workflowSteps = [
+    'dealCreated',
+    'partiesAccepted', 
+    'kycVerified',
+    'documentsUploaded',
+    'paymentDeposited',
+    'contractSigned',
+    'itemDelivered',
+    'buyerConfirmed',
+    'fundsReleased'
+  ];
+  
   let completedSteps = 0;
   
-  if (this.workflow.dealCreated.completed) completedSteps++;
-  if (this.workflow.partiesAccepted.completed) completedSteps++;
-  if (this.workflow.kycVerified.completed) completedSteps++;
-  if (this.workflow.documentsUploaded.completed) completedSteps++;
-  if (this.workflow.paymentDeposited.completed) completedSteps++;
-  if (this.workflow.contractSigned.completed) completedSteps++;
-  if (this.workflow.itemDelivered.completed) completedSteps++;
-  if (this.workflow.fundsReleased.completed) completedSteps++;
+  // Count completed steps
+  workflowSteps.forEach(step => {
+    if (this.workflow[step] && this.workflow[step].completed) {
+      completedSteps++;
+    }
+  });
   
-  return Math.round((completedSteps / totalSteps) * 100);
+  // Special handling for completed deals
+  if (this.status === 'completed') {
+    // Ensure all critical steps are marked as complete for completed deals
+    const criticalSteps = ['dealCreated', 'partiesAccepted', 'paymentDeposited', 'itemDelivered', 'buyerConfirmed', 'fundsReleased'];
+    let criticalCompleted = 0;
+    
+    criticalSteps.forEach(step => {
+      if (this.workflow[step] && this.workflow[step].completed) {
+        criticalCompleted++;
+      }
+    });
+    
+    // If all critical steps are done, return 100%
+    if (criticalCompleted === criticalSteps.length) {
+      return 100;
+    }
+    
+    // Otherwise, ensure at least 90% for completed deals
+    return Math.max(90, Math.round((completedSteps / workflowSteps.length) * 100));
+  }
+  
+  // For disputed deals, show progress based on how far they got
+  if (this.status === 'disputed') {
+    return Math.round((completedSteps / workflowSteps.length) * 100);
+  }
+  
+  // For cancelled/refunded deals, show minimal progress
+  if (['cancelled', 'refunded'].includes(this.status)) {
+    return Math.min(25, Math.round((completedSteps / workflowSteps.length) * 100));
+  }
+  
+  return Math.round((completedSteps / workflowSteps.length) * 100);
 };
 
 // Method to check if user can perform action
@@ -730,10 +771,32 @@ dealSchema.methods.canUserPerformAction = function(userId, action) {
     case 'confirm_receipt':
       return this.status === 'delivered' && isBuyer;
     case 'raise_dispute':
-      return ['funds_deposited', 'in_delivery', 'delivered'].includes(this.status);
+      return ['funds_deposited', 'in_delivery', 'delivered'].includes(this.status) && !this.dispute.isDisputed;
     default:
       return false;
   }
+};
+
+// Method to raise a dispute
+dealSchema.methods.raiseDispute = function(userId, reason, description) {
+  if (!this.canUserPerformAction(userId, 'raise_dispute')) {
+    throw new Error('Cannot raise dispute at this stage');
+  }
+  
+  this.dispute.isDisputed = true;
+  this.dispute.raisedBy = userId;
+  this.dispute.raisedAt = new Date();
+  this.dispute.reason = reason;
+  this.dispute.description = description;
+  this.dispute.status = 'open';
+  this.status = 'disputed';
+  
+  // Add system message
+  this.messages.push({
+    sender: userId,
+    message: `Dispute raised: ${reason}`,
+    isSystemMessage: true
+  });
 };
 
 const Deal = mongoose.model('Deal', dealSchema);
