@@ -31,6 +31,7 @@ interface FileUploadProps {
   className?: string;
   children?: React.ReactNode;
   documentType?: string;
+  uploadedFile?: UploadResult | null; // Add this prop to show existing uploads
 }
 
 interface FileUploadState {
@@ -52,17 +53,23 @@ const FileUpload: React.FC<FileUploadProps> = ({
   disabled = false,
   className = '',
   children,
-  documentType
+  documentType,
+  uploadedFile = null
 }) => {
   const [state, setState] = useState<FileUploadState>({
     isDragging: false,
     isUploading: false,
     progress: null,
     error: null,
-    uploadedFile: null
+    uploadedFile: uploadedFile
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Update state when uploadedFile prop changes
+  React.useEffect(() => {
+    setState(prev => ({ ...prev, uploadedFile: uploadedFile }));
+  }, [uploadedFile]);
 
   const validateFile = (file: File): { valid: boolean; error?: string } => {
     // Check file size
@@ -137,6 +144,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
   const handleFiles = async (files: File[]) => {
     const file = files[0]; // Handle single file for now
     
+    console.log('Starting file upload:', file.name, file.type, file.size);
+    
     // Validate file
     const validation = validateFile(file);
 
@@ -161,6 +170,8 @@ const FileUpload: React.FC<FileUploadProps> = ({
       if (documentType) {
         formData.append('documentType', documentType);
       }
+
+      console.log('FormData created with documentType:', documentType);
 
       // Get auth token
       const token = localStorage.getItem('token');
@@ -188,35 +199,44 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
       // Handle completion
       xhr.addEventListener('load', () => {
+        console.log('Upload completed with status:', xhr.status);
+        console.log('Response text:', xhr.responseText);
+        
         try {
           const response = JSON.parse(xhr.responseText);
+          console.log('Parsed response:', response);
           
-          if (xhr.status >= 200 && xhr.status < 300 && response.success) {
-            const result: UploadResult = {
-              success: true,
-              message: response.message || 'File uploaded successfully',
-              data: {
-                fileName: response.data?.fileName || file.name,
-                fileUrl: response.data?.fileUrl || '',
-                fileSize: response.data?.fileSize || file.size,
-                mimeType: response.data?.mimeType || file.type,
-                documentType: documentType
-              }
-            };
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (response.success) {
+              const result: UploadResult = {
+                success: true,
+                message: response.message || 'File uploaded successfully',
+                data: {
+                  fileName: response.data?.fileName || file.name,
+                  fileUrl: response.data?.fileUrl || '',
+                  fileSize: response.data?.fileSize || file.size,
+                  mimeType: response.data?.mimeType || file.type,
+                  documentType: response.data?.documentType || documentType
+                }
+              };
 
-            setState(prev => ({ 
-              ...prev, 
-              isUploading: false, 
-              progress: null, 
-              uploadedFile: result 
-            }));
-            
-            onUpload(result);
+              console.log('Upload result:', result);
+
+              setState(prev => ({ 
+                ...prev, 
+                isUploading: false, 
+                progress: null, 
+                uploadedFile: result,
+                error: null
+              }));
+              
+              // Call the onUpload callback
+              onUpload(result);
+            } else {
+              throw new Error(response.message || 'Upload failed');
+            }
           } else {
-            // Handle error response
-            const errorMessage = response.message || 'Upload failed';
-            console.error('Upload error response:', response);
-            throw new Error(errorMessage);
+            throw new Error(response.message || `HTTP ${xhr.status}: Upload failed`);
           }
         } catch (parseError) {
           console.error('Error parsing response:', parseError);
@@ -236,8 +256,11 @@ const FileUpload: React.FC<FileUploadProps> = ({
       });
 
       // Set up the request
-      xhr.open('POST', `${import.meta.env.VITE_API_URL}/kyc/upload`);
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      xhr.open('POST', `${apiUrl}/kyc/upload`);
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      
+      console.log('Sending request to:', `${apiUrl}/kyc/upload`);
       
       // Send the request
       xhr.send(formData);
@@ -273,20 +296,23 @@ const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const getFileIcon = (mimeType: string) => {
-    if (mimeType.startsWith('image/')) {
+    if (mimeType && mimeType.startsWith('image/')) {
       return <Image className="w-8 h-8" />;
     }
     return <FileText className="w-8 h-8" />;
   };
 
-  if (state.uploadedFile) {
+  // Show uploaded file state
+  if (state.uploadedFile && state.uploadedFile.success) {
     return (
       <div className={`border-2 border-green-300 bg-green-50 rounded-lg p-4 ${className}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <CheckCircle className="w-6 h-6 text-green-600" />
             <div>
-              <p className="font-medium text-green-900">{state.uploadedFile.data?.fileName}</p>
+              <p className="font-medium text-green-900">
+                {state.uploadedFile.data?.fileName || 'Document uploaded'}
+              </p>
               <p className="text-sm text-green-700">
                 {state.uploadedFile.data?.fileSize && 
                   formatFileSize(state.uploadedFile.data.fileSize)
@@ -297,6 +323,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
           <button
             onClick={handleRemove}
             className="p-1 hover:bg-green-200 rounded-full transition-colors"
+            title="Remove file"
           >
             <X className="w-4 h-4 text-green-600" />
           </button>

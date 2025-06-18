@@ -92,6 +92,8 @@ const KYCPage = () => {
       setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
       setError('');
       
+      console.log('Document upload result:', result);
+      
       if (result.success) {
         setSuccessMessage(`${documentType} uploaded successfully`);
         setTimeout(() => setSuccessMessage(''), 3000);
@@ -103,6 +105,7 @@ const KYCPage = () => {
       }
       
     } catch (error: any) {
+      console.error('Document upload error:', error);
       setError(error.message || 'Upload failed');
       setTimeout(() => setError(''), 5000);
     } finally {
@@ -289,6 +292,19 @@ const KYCPage = () => {
     const isUploaded = documentData && documentData.fileUrl;
     const isUploading = uploadingDocs[docType];
     
+    // Create upload result for existing document
+    const existingUpload = isUploaded ? {
+      success: true,
+      message: 'Document already uploaded',
+      data: {
+        fileName: documentData.fileName,
+        fileUrl: documentData.fileUrl,
+        fileSize: 0, // We don't have this info from backend
+        mimeType: '',
+        documentType: docType
+      }
+    } : null;
+    
     return (
       <div className="border border-gray-200 rounded-lg p-6">
         <div className="flex items-start justify-between mb-4">
@@ -321,16 +337,36 @@ const KYCPage = () => {
             {documentData.verificationNotes && (
               <p className="text-sm text-green-700 mt-2">{documentData.verificationNotes}</p>
             )}
+            <button
+              onClick={() => {
+                // Allow re-upload by clearing the existing document
+                setKycData(prev => {
+                  if (!prev) return prev;
+                  const newDocs = { ...prev.documents };
+                  delete newDocs[docType as keyof typeof newDocs];
+                  return { ...prev, documents: newDocs };
+                });
+              }}
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800 underline"
+            >
+              Upload different file
+            </button>
           </div>
         ) : (
           <FileUpload
             onUpload={(result) => handleDocumentUpload(result, docType)}
-            onError={(error) => setError(error)}
+            onError={(error) => {
+              console.error('Upload error:', error);
+              setError(error);
+              setTimeout(() => setError(''), 5000);
+            }}
             accept=".pdf,.jpg,.jpeg,.png"
             maxSize={10 * 1024 * 1024}
             allowedTypes={['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']}
             allowedExtensions={['pdf', 'jpg', 'jpeg', 'png']}
             documentType={docType}
+            uploadedFile={existingUpload}
+            disabled={isUploading}
           />
         )}
       </div>

@@ -56,6 +56,14 @@ export const uploadDocument = async (req, res) => {
 
       const { documentType } = req.body;
       
+      console.log('Upload request:', {
+        userId: req.user.userId,
+        documentType,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype
+      });
+      
       if (!documentType) {
         // Clean up uploaded file if documentType is missing
         if (req.file && req.file.path) {
