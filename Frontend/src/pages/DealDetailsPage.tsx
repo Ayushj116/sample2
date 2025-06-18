@@ -176,16 +176,25 @@ const DealDetailsPage = () => {
       setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
       setError('');
       
+      console.log('Document upload result:', result);
+      
       if (result.success) {
+        // Show success message
         alert(`Document uploaded successfully`);
         
         // Refresh deal data to get updated document status
         await fetchDeal(true);
+        
+        // Close the upload modal after successful upload
+        setTimeout(() => {
+          setShowDocumentUpload(false);
+        }, 1000);
       } else {
         throw new Error(result.message || 'Upload failed');
       }
       
     } catch (error: any) {
+      console.error('Document upload error:', error);
       setError(error.message || 'Upload failed');
       setTimeout(() => setError(''), 5000);
     } finally {
@@ -330,7 +339,7 @@ const DealDetailsPage = () => {
             )}
           </div>
         ) : (
-          <FileUpload
+          <DealFileUpload
             onUpload={(result) => handleDocumentUpload(result, docType)}
             onError={(error) => {
               console.error('Upload error:', error);
@@ -342,6 +351,8 @@ const DealDetailsPage = () => {
             allowedTypes={['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']}
             allowedExtensions={['pdf', 'jpg', 'jpeg', 'png']}
             documentType={docType}
+            dealId={deal?.id || ''}
+            disabled={isUploading}
           />
         )}
       </div>
@@ -907,6 +918,224 @@ const DealDetailsPage = () => {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// Custom FileUpload component for deal documents
+const DealFileUpload: React.FC<{
+  onUpload: (result: UploadResult) => void;
+  onError: (error: string) => void;
+  accept?: string;
+  maxSize?: number;
+  allowedTypes?: string[];
+  allowedExtensions?: string[];
+  documentType?: string;
+  dealId: string;
+  disabled?: boolean;
+}> = ({
+  onUpload,
+  onError,
+  accept = '.pdf,.jpg,.jpeg,.png',
+  maxSize = 10 * 1024 * 1024,
+  allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'],
+  allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'],
+  documentType,
+  dealId,
+  disabled = false
+}) => {
+  const [isUploading, setIsUploading] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const validateFile = (file: File): { valid: boolean; error?: string } => {
+    if (file.size > maxSize) {
+      return {
+        valid: false,
+        error: `File size must be less than ${Math.round(maxSize / (1024 * 1024))}MB`
+      };
+    }
+
+    if (allowedTypes.length > 0 && !allowedTypes.includes(file.type)) {
+      return {
+        valid: false,
+        error: `File type ${file.type} is not allowed`
+      };
+    }
+
+    if (allowedExtensions.length > 0) {
+      const extension = file.name.split('.').pop()?.toLowerCase();
+      if (!extension || !allowedExtensions.includes(extension)) {
+        return {
+          valid: false,
+          error: `File extension must be one of: ${allowedExtensions.join(', ')}`
+        };
+      }
+    }
+
+    return { valid: true };
+  };
+
+  const handleFileSelect = async (file: File) => {
+    const validation = validateFile(file);
+    if (!validation.valid) {
+      setError(validation.error || 'Invalid file');
+      onError(validation.error || 'Invalid file');
+      return;
+    }
+
+    setIsUploading(true);
+    setError(null);
+    setProgress(0);
+
+    try {
+      const formData = new FormData();
+      formData.append('document', file);
+      if (documentType) {
+        formData.append('documentType', documentType);
+      }
+
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const xhr = new XMLHttpRequest();
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable) {
+          const percentage = Math.round((event.loaded / event.total) * 100);
+          setProgress(percentage);
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          
+          if (xhr.status >= 200 && xhr.status < 300) {
+            if (response.success) {
+              const result: UploadResult = {
+                success: true,
+                message: response.message || 'File uploaded successfully',
+                data: {
+                  fileName: response.data?.fileName || file.name,
+                  fileUrl: response.data?.fileUrl || '',
+                  fileSize: response.data?.fileSize || file.size,
+                  mimeType: response.data?.mimeType || file.type
+                }
+              };
+              onUpload(result);
+            } else {
+              throw new Error(response.message || 'Upload failed');
+            }
+          } else {
+            throw new Error(response.message || `HTTP ${xhr.status}: Upload failed`);
+          }
+        } catch (parseError) {
+          throw new Error('Invalid response from server');
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        throw new Error('Network error during upload');
+      });
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      xhr.open('POST', `${apiUrl}/deals/${dealId}/documents`);
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.send(formData);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+      setError(errorMessage);
+      onError(errorMessage);
+    } finally {
+      setIsUploading(false);
+      setProgress(0);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (disabled || isUploading) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
+  return (
+    <div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept={accept}
+        onChange={handleFileInputChange}
+        className="hidden"
+        disabled={disabled || isUploading}
+      />
+      
+      <div
+        onDrop={handleDrop}
+        onDragOver={(e) => e.preventDefault()}
+        onClick={() => !disabled && !isUploading && fileInputRef.current?.click()}
+        className={`
+          border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
+          ${isUploading ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'}
+          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          ${error ? 'border-red-300 bg-red-50' : ''}
+        `}
+      >
+        {isUploading ? (
+          <div className="space-y-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-sm font-medium text-gray-700">Uploading...</p>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-500">{progress}% complete</p>
+          </div>
+        ) : error ? (
+          <div className="space-y-2">
+            <AlertCircle className="w-8 h-8 text-red-600 mx-auto" />
+            <p className="text-sm font-medium text-red-900">Upload Failed</p>
+            <p className="text-xs text-red-700">{error}</p>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setError(null);
+              }}
+              className="text-xs text-red-600 hover:text-red-800 underline"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Upload className="w-8 h-8 text-gray-400 mx-auto" />
+            <p className="text-sm font-medium text-gray-700">
+              Drop files here or click to upload
+            </p>
+            <p className="text-xs text-gray-500">
+              Supports: {allowedExtensions.join(', ').toUpperCase()} 
+              (Max: {Math.round(maxSize / (1024 * 1024))}MB)
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

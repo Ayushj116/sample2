@@ -1,5 +1,6 @@
 import express from 'express';
 import { body, param } from 'express-validator';
+import { handleMulterError } from '../middleware/upload.js';
 import {
   createDeal,
   getDeals,
@@ -7,7 +8,8 @@ import {
   acceptDeal,
   addMessage,
   cancelDeal,
-  sendKYCReminder
+  sendKYCReminder,
+  uploadDealDocument
 } from '../controllers/dealController.js';
 
 const router = express.Router();
@@ -55,6 +57,9 @@ const addMessageValidation = [
   body('message').trim().isLength({ min: 1, max: 1000 }).withMessage('Message must be 1-1000 characters')
 ];
 
+// Apply multer error handling to document upload routes
+router.use('/:id/documents', handleMulterError);
+
 router.post('/', createDealValidation, createDeal);
 router.get('/', getDeals);
 router.get('/:id', param('id').isMongoId(), getDeal);
@@ -62,5 +67,6 @@ router.post('/:id/accept', param('id').isMongoId(), acceptDeal);
 router.post('/:id/messages', addMessageValidation, addMessage);
 router.post('/:id/cancel', param('id').isMongoId(), cancelDeal);
 router.post('/:id/send-kyc-reminder', param('id').isMongoId(), sendKYCReminder);
+router.post('/:id/documents', param('id').isMongoId(), uploadDealDocument);
 
 export default router;

@@ -2,6 +2,7 @@ import { body, validationResult, param } from 'express-validator';
 import Deal from '../models/Deal.js';
 import User from '../models/User.js';
 import KYC from '../models/KYC.js';
+import upload from '../middleware/upload.js';
 import { sendSMS } from '../services/smsService.js';
 import { calculateEscrowFee } from '../utils/feeCalculator.js';
 
@@ -730,6 +731,186 @@ export const sendKYCReminder = async (req, res) => {
 
   } catch (error) {
     console.error('Send KYC reminder error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+};
+
+export const uploadDealDocument = async (req, res) => {
+  try {
+    // Use multer middleware
+    upload.single('document')(req, res, async (err) => {
+      if (err) {
+        console.error('Multer error:', err);
+        return res.status(400).json({
+          success: false,
+          message: err.message
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'No file uploaded'
+        });
+      }
+
+      const { documentType } = req.body;
+      const dealId = req.params.id;
+      
+      console.log('Deal document upload request:', {
+        userId: req.user.userId,
+        dealId,
+        documentType,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype
+      });
+      
+      if (!documentType) {
+        // Clean up uploaded file if documentType is missing
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file:', cleanupError);
+          }
+        }
+        
+        return res.status(400).json({
+          success: false,
+          message: 'Document type is required'
+        });
+      }
+
+      // Validate document type for deals
+      const validDocumentTypes = [
+        'ownership', 'identity', 'agreement', 'delivery_proof', 'other'
+      ];
+
+      if (!validDocumentTypes.includes(documentType)) {
+        // Clean up uploaded file
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file:', cleanupError);
+          }
+        }
+        
+        return res.status(400).json({
+          success: false,
+          message: `Invalid document type. Valid types are: ${validDocumentTypes.join(', ')}`
+        });
+      }
+
+      try {
+        const deal = await Deal.findById(dealId);
+        
+        if (!deal) {
+          // Clean up uploaded file
+          if (req.file && req.file.path) {
+            try {
+              fs.unlinkSync(req.file.path);
+            } catch (cleanupError) {
+              console.error('Error cleaning up file:', cleanupError);
+            }
+          }
+          
+          return res.status(404).json({
+            success: false,
+            message: 'Deal not found'
+          });
+        }
+
+        // Check if user is authorized to upload documents for this deal
+        const userIdStr = req.user.userId;
+        const buyerIdStr = deal.buyer.toString();
+        const sellerIdStr = deal.seller.toString();
+
+        if (userIdStr !== buyerIdStr && userIdStr !== sellerIdStr) {
+          // Clean up uploaded file
+          if (req.file && req.file.path) {
+            try {
+              fs.unlinkSync(req.file.path);
+            } catch (cleanupError) {
+              console.error('Error cleaning up file:', cleanupError);
+            }
+          }
+          
+          return res.status(403).json({
+            success: false,
+            message: 'Not authorized to upload documents for this deal'
+          });
+        }
+
+        const documentData = {
+          uploadedBy: req.user.userId,
+          documentType,
+          fileName: req.file.originalname,
+          fileUrl: `/uploads/${req.file.filename}`,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype,
+          uploadedAt: new Date(),
+          verified: false
+        };
+
+        // Add document to deal
+        deal.documents.push(documentData);
+        
+        // Add system message
+        const user = await User.findById(req.user.userId);
+        deal.messages.push({
+          sender: req.user.userId,
+          message: `${user.fullName} uploaded ${documentType} document: ${req.file.originalname}`,
+          isSystemMessage: true
+        });
+        
+        await deal.save();
+
+        console.log('Deal document uploaded successfully:', {
+          userId: req.user.userId,
+          dealId,
+          documentType,
+          fileName: req.file.originalname,
+          fileSize: req.file.size
+        });
+
+        res.json({
+          success: true,
+          message: 'Document uploaded successfully',
+          data: {
+            fileName: req.file.originalname,
+            fileUrl: `/uploads/${req.file.filename}`,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            documentType: documentType
+          }
+        });
+
+      } catch (dbError) {
+        console.error('Database error during deal document upload:', dbError);
+        
+        // Clean up uploaded file on database error
+        if (req.file && req.file.path) {
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (cleanupError) {
+            console.error('Error cleaning up file after DB error:', cleanupError);
+          }
+        }
+        
+        res.status(500).json({
+          success: false,
+          message: 'Failed to save document information'
+        });
+      }
+    });
+
+  } catch (error) {
+    console.error('Upload deal document error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'

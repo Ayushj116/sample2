@@ -142,5 +142,65 @@ export const dealService = {
 
   async sendKYCReminder(id: string): Promise<{ success: boolean; message: string }> {
     return api.post(`/deals/${id}/send-kyc-reminder`);
+  },
+
+  async uploadDealDocument(
+    dealId: string, 
+    file: File, 
+    documentType: string,
+    onProgress?: (progress: { loaded: number; total: number; percentage: number }) => void
+  ): Promise<{ success: boolean; message: string; data: any }> {
+    return new Promise((resolve, reject) => {
+      const formData = new FormData();
+      formData.append('document', file);
+      formData.append('documentType', documentType);
+
+      const xhr = new XMLHttpRequest();
+
+      // Track upload progress
+      if (onProgress) {
+        xhr.upload.addEventListener('progress', (event) => {
+          if (event.lengthComputable) {
+            const progress = {
+              loaded: event.loaded,
+              total: event.total,
+              percentage: Math.round((event.loaded / event.total) * 100)
+            };
+            onProgress(progress);
+          }
+        });
+      }
+
+      xhr.addEventListener('load', () => {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(response);
+          } else {
+            reject(new Error(response.message || 'Upload failed'));
+          }
+        } catch (error) {
+          reject(new Error('Invalid response from server'));
+        }
+      });
+
+      xhr.addEventListener('error', () => {
+        reject(new Error('Network error during upload'));
+      });
+
+      xhr.addEventListener('abort', () => {
+        reject(new Error('Upload was cancelled'));
+      });
+
+      // Set up the request
+      const token = localStorage.getItem('token');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+      xhr.open('POST', `${apiUrl}/deals/${dealId}/documents`);
+      xhr.send(formData);
+    });
   }
 };
