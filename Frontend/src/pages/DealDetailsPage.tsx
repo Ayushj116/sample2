@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { dealService, Deal } from '../services/dealService';
 import { useAuth } from '../context/AuthContext';
+import FileUpload, { UploadResult } from '../components/FileUpload';
 
 const DealDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -41,6 +42,8 @@ const DealDetailsPage = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [hasShownKYCAlert, setHasShownKYCAlert] = useState(false);
   const [sendingReminder, setSendingReminder] = useState(false);
+  const [showDocumentUpload, setShowDocumentUpload] = useState(false);
+  const [uploadingDocs, setUploadingDocs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (id) {
@@ -168,6 +171,28 @@ const DealDetailsPage = () => {
     }
   };
 
+  const handleDocumentUpload = async (result: UploadResult, documentType: string) => {
+    try {
+      setUploadingDocs(prev => ({ ...prev, [documentType]: true }));
+      setError('');
+      
+      if (result.success) {
+        alert(`${documentType} uploaded successfully`);
+        
+        // Refresh deal data to get updated document status
+        await fetchDeal(true);
+      } else {
+        throw new Error(result.message || 'Upload failed');
+      }
+      
+    } catch (error: any) {
+      setError(error.message || 'Upload failed');
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setUploadingDocs(prev => ({ ...prev, [documentType]: false }));
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -252,6 +277,71 @@ const DealDetailsPage = () => {
   const shouldShowDocumentUpload = () => {
     if (!deal) return false;
     return deal.nextAction.includes('Upload required documents');
+  };
+
+  const DocumentUploadSection = ({ 
+    title, 
+    description, 
+    docType, 
+    isRequired = true,
+    acceptedFormats = "PDF, JPG, PNG" 
+  }: {
+    title: string;
+    description: string;
+    docType: string;
+    isRequired?: boolean;
+    acceptedFormats?: string;
+  }) => {
+    const documentData = deal?.documents?.find(doc => doc.documentType === docType);
+    const isUploaded = documentData && documentData.fileUrl;
+    const isUploading = uploadingDocs[docType];
+    
+    return (
+      <div className="border border-gray-200 rounded-lg p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-1">
+              {title}
+              {isRequired && <span className="text-red-500 ml-1">*</span>}
+            </h3>
+            <p className="text-sm text-gray-600">{description}</p>
+            <p className="text-xs text-gray-500 mt-1">Accepted: {acceptedFormats}</p>
+          </div>
+          {isUploaded && (
+            <div className="text-green-600">
+              <CheckCircle className="w-6 h-6" />
+            </div>
+          )}
+        </div>
+        
+        {isUploaded ? (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+              <span className="text-sm font-medium text-green-800">
+                Document uploaded successfully
+              </span>
+            </div>
+            <p className="text-sm text-green-700 mt-1">
+              File: {documentData.fileName}
+            </p>
+            {documentData.verified && (
+              <p className="text-sm text-green-700 mt-2">✓ Verified</p>
+            )}
+          </div>
+        ) : (
+          <FileUpload
+            onUpload={(result) => handleDocumentUpload(result, docType)}
+            onError={(error) => setError(error)}
+            accept=".pdf,.jpg,.jpeg,.png"
+            maxSize={10 * 1024 * 1024}
+            allowedTypes={['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']}
+            allowedExtensions={['pdf', 'jpg', 'jpeg', 'png']}
+            documentType={docType}
+          />
+        )}
+      </div>
+    );
   };
 
   if (isLoading) {
@@ -403,13 +493,52 @@ const DealDetailsPage = () => {
                   </span>
                 </div>
               </div>
-              <Link
-                to={`/deal/${deal.id}/documents`}
+              <button
+                onClick={() => setShowDocumentUpload(true)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
               >
                 <Upload className="w-4 h-4 mr-2" />
                 Upload Documents
-              </Link>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Document Upload Modal */}
+        {showDocumentUpload && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-96 overflow-y-auto">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold">Upload Required Documents</h3>
+                <button 
+                  onClick={() => setShowDocumentUpload(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {getRequiredDocuments().map((doc, index) => (
+                  <DocumentUploadSection
+                    key={index}
+                    title={doc.name}
+                    description={`Upload ${doc.name.toLowerCase()}`}
+                    docType={doc.type}
+                    isRequired={doc.required}
+                    acceptedFormats="PDF, JPG, PNG (Max 10MB)"
+                  />
+                ))}
+              </div>
+              
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowDocumentUpload(false)}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -693,7 +822,10 @@ const DealDetailsPage = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-gray-900">Documents</h3>
-                  <button className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center">
+                  <button 
+                    onClick={() => setShowDocumentUpload(true)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
+                  >
                     <Upload className="w-4 h-4 mr-2" />
                     Upload Document
                   </button>
