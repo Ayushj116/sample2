@@ -72,11 +72,13 @@ export const uploadDocument = async (req, res) => {
         });
       }
 
-      // Validate document type
+      // Validate document type - Updated to include all valid types
       const validDocumentTypes = [
         'panCard', 'aadhaarFront', 'aadhaarBack', 'bankStatement', 
         'addressProof', 'businessRegistration', 'gstCertificate', 
-        'businessBankStatement', 'authorizedSignatoryId'
+        'businessBankStatement', 'authorizedSignatoryId',
+        // Deal document types
+        'ownership', 'identity', 'agreement', 'delivery_proof', 'other'
       ];
 
       if (!validDocumentTypes.includes(documentType)) {
@@ -91,7 +93,7 @@ export const uploadDocument = async (req, res) => {
         
         return res.status(400).json({
           success: false,
-          message: 'Invalid document type'
+          message: `Invalid document type. Valid types are: ${validDocumentTypes.join(', ')}`
         });
       }
 

@@ -177,7 +177,7 @@ const DealDetailsPage = () => {
       setError('');
       
       if (result.success) {
-        alert(`${documentType} uploaded successfully`);
+        alert(`Document uploaded successfully`);
         
         // Refresh deal data to get updated document status
         await fetchDeal(true);
@@ -332,7 +332,11 @@ const DealDetailsPage = () => {
         ) : (
           <FileUpload
             onUpload={(result) => handleDocumentUpload(result, docType)}
-            onError={(error) => setError(error)}
+            onError={(error) => {
+              console.error('Upload error:', error);
+              setError(error);
+              setTimeout(() => setError(''), 5000);
+            }}
             accept=".pdf,.jpg,.jpeg,.png"
             maxSize={10 * 1024 * 1024}
             allowedTypes={['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']}
@@ -439,7 +443,10 @@ const DealDetailsPage = () => {
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <p className="text-red-600">{error}</p>
+              <div className="flex items-center">
+                <AlertCircle className="w-5 h-5 text-red-600 mr-2" />
+                <p className="text-red-600">{error}</p>
+              </div>
               <button onClick={() => setError('')} className="text-red-600 hover:text-red-800">
                 <X className="w-4 h-4" />
               </button>

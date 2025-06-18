@@ -141,8 +141,9 @@ const FileUpload: React.FC<FileUploadProps> = ({
     const validation = validateFile(file);
 
     if (!validation.valid) {
-      setState(prev => ({ ...prev, error: validation.error || 'Invalid file' }));
-      onError(validation.error || 'Invalid file');
+      const errorMessage = validation.error || 'Invalid file';
+      setState(prev => ({ ...prev, error: errorMessage }));
+      onError(errorMessage);
       return;
     }
 
@@ -212,19 +213,25 @@ const FileUpload: React.FC<FileUploadProps> = ({
             
             onUpload(result);
           } else {
-            throw new Error(response.message || 'Upload failed');
+            // Handle error response
+            const errorMessage = response.message || 'Upload failed';
+            console.error('Upload error response:', response);
+            throw new Error(errorMessage);
           }
         } catch (parseError) {
+          console.error('Error parsing response:', parseError);
           throw new Error('Invalid response from server');
         }
       });
 
       // Handle errors
       xhr.addEventListener('error', () => {
+        console.error('Network error during upload');
         throw new Error('Network error during upload');
       });
 
       xhr.addEventListener('abort', () => {
+        console.error('Upload was cancelled');
         throw new Error('Upload was cancelled');
       });
 
@@ -236,6 +243,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
       xhr.send(formData);
 
     } catch (error) {
+      console.error('Upload error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
       setState(prev => ({ 
         ...prev, 
